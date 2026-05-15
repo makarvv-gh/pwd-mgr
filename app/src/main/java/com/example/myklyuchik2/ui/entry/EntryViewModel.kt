@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.utils.Constants
+
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.UUID
-
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 // ==================== Состояние формы ====================
 data class EntryFormState(
 	val id: String = UUID.randomUUID().toString(),
@@ -87,7 +89,25 @@ class EntryViewModel(
 			)
 		}
 	}
+	fun loadEntryForEdit(entryId: String) {
+		viewModelScope.launch {
+			try {
+				// Загружаем в IO-потоке, чтобы не блокировать UI
+				val entry = withContext(Dispatchers.IO) {
+					val entries = SecureStorage.loadEncrypted(dataPath, masterPassword)
+					entries.find { it.id == entryId }
+				}
 
+				if (entry != null) {
+					initEdit(entry) // Заполняем форму найденной записью
+				} else {
+					_formState.update { it.copy(error = "Запись не найдена") }
+				}
+			} catch (e: Exception) {
+				_formState.update { it.copy(error = "Ошибка загрузки: ${e.message}") }
+			}
+		}
+	}
 	// Обновление полей формы
 	fun updateResourceName(value: String) {
 		_formState.update {
