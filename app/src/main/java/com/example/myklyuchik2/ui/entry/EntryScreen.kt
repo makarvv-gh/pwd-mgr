@@ -27,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.myklyuchik2.ui.main.model.EntryMode
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.utils.Constants
 import java.io.File
@@ -379,7 +380,7 @@ private fun EntryTopAppBar(
 }
 
 //==================== Режимы экрана ====================
-enum class EntryMode { CREATE, EDIT }
+//enum class EntryMode { CREATE, EDIT }
 
 // ==================== Preview ====================
 @Preview(showBackground = true, name = "EntryScreen Light")

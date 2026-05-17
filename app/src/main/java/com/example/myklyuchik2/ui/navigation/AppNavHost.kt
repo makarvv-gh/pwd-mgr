@@ -4,8 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.navigation.navArgument
 import androidx.navigation.compose.composable
 import com.example.myklyuchik2.ui.entry.EntryScreen
+import com.example.myklyuchik2.ui.main.model.EntryMode
 import com.example.myklyuchik2.ui.main.MainScreen
 import com.example.myklyuchik2.ui.splash.SplashScreen
 
@@ -18,7 +20,7 @@ sealed class Screen(val route: String) {
 	}
 }
 
-enum class EntryMode { CREATE, EDIT }
+//enum class EntryMode { CREATE, EDIT }
 
 @Composable
 fun AppNavHost(
