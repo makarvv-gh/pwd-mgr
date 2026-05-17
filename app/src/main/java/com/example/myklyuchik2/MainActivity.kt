@@ -1,5 +1,15 @@
 package com.example.myklyuchik2
 
+import androidx.activity.ComponentActivity
+import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.platform.setContent
+import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
+import com.example.myklyuchik2.ui.nav.AppNavHost
 // MainActivity.kt — теперь только хост для Compose
 class MainActivity : ComponentActivity() {
 	override fun onCreate(savedInstanceState: Bundle?) {
