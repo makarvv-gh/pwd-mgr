@@ -340,7 +340,19 @@ fun PasswordListItem(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                // Your existing content here
+	            Column(
+		            modifier = Modifier.padding(16.dp),
+		            verticalArrangement = Arrangement.spacedBy(8.dp)
+	            ) {
+		            Text(
+			            text = "Resource: ${entry.resourceName}",
+			            style = MaterialTheme.typography.titleMedium
+		            )
+		            Text(
+			            text = "Login: ${entry.login}",
+			            style = MaterialTheme.typography.bodyMedium
+		            )
+	            }
             }
         }
     )

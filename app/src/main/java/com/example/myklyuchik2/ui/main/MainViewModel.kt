@@ -191,6 +191,7 @@ class MainViewModel(
 					it.copy(
 						isLoading = false,
 						allEntries = entries,
+						//filteredEntries = entries,
 						filteredEntries = applyFilters(entries, it.filters)
 					)
 				}
