@@ -6,13 +6,23 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.*
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
+
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -23,12 +33,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.rememberNavController
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.JsonStorage
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.ui.main.model.UiEvent
 import com.example.myklyuchik2.ui.main.model.UiState
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
+import androidx.navigation.NavController
+import com.example.myklyuchik2.ui.navigation.Screen
 import com.example.myklyuchik2.utils.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +56,7 @@ import java.util.Date
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
+	navController: NavController,
 	viewModel: MainViewModel = viewModel(
 		factory = MainViewModel.Factory(
 			context = LocalContext.current.applicationContext,
@@ -89,7 +103,9 @@ fun MainScreen(
 		topBar = {
 			MainTopAppBar(
 				onSearchClick = { viewModel.toggleFilterSheet(true) },
-				onSettingsClick = { viewModel.toggleSettingsDialog(true) }
+				//onSettingsClick = { viewModel.toggleSettingsDialog(true) },
+				onSettingsClick = { navController.navigate("settings") }, // Direct navigation
+				navController = navController
 			)
 		},
 		floatingActionButton = {
@@ -145,11 +161,12 @@ fun MainScreen(
 				verticalArrangement = Arrangement.spacedBy(8.dp)
 			) {
 				items(
+					//items = uiState.filteredEntries,
 					items = state.filteredEntries,
 					key = { it.id }
 				) { entry ->
 					PasswordListItem(
-						entry = entry,
+						entry = entry ?: return@items, // Add null check
 						onEdit = { onEditEntry(entry) },
 						onDelete = {
 							// Показываем диалог подтверждения удаления
@@ -167,8 +184,8 @@ fun MainScreen(
 						}
 					)
 				}
-
-				if (state.filteredEntries.isEmpty() && !state.isLoading) {
+				if (!state.isLoading && state.filteredEntries.isEmpty()) {
+				//if (state.filteredEntries.isEmpty() && !state.isLoading) {
 					item {
 						EmptyStateView(hasFilters = state.filters.searchQuery.isNotBlank() || state.filters.tagFilters.isNotEmpty())
 					}
@@ -189,11 +206,12 @@ fun MainScreen(
 		}
 
 		// Диалог настроек (заглушка)
-		if (state.showSettingsDialog) {
-			SettingsDialog(
+		/*if (state.showSettingsDialog) {
+			/*SettingsDialog(
 				onDismiss = { viewModel.toggleSettingsDialog(false) }
-			)
-		}
+			)*/
+			navController.navigate("settings")
+		}*/
 	}
 }
 
@@ -202,7 +220,9 @@ fun MainScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun MainTopAppBar(
 	onSearchClick: () -> Unit,
-	onSettingsClick: () -> Unit,
+	navController: NavController,
+	//onSettingsClick: () -> Unit = { navController.navigate("settings") },
+	onSettingsClick: () -> Unit = { navController.navigate(Screen.Settings.route) },
 	modifier: Modifier = Modifier
 ) {
 	TopAppBar(
@@ -220,6 +240,8 @@ private fun MainTopAppBar(
 }
 
 // ==================== Active Filters Bar ====================
+//@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActiveFiltersBar(
 	filters: UiState.Filters,
@@ -232,11 +254,15 @@ private fun ActiveFiltersBar(
 	Column(modifier = modifier) {
 		// Текущие фильтры
 		if (filters.tagFilters.isNotEmpty()) {
-			@OptIn(ExperimentalLayoutApi::class)
-			FlowRow(
-				horizontalArrangement = Arrangement.spacedBy(4.dp),
-				verticalArrangement = Arrangement.spacedBy(4.dp),
+			//@OptIn(ExperimentalLayoutApi::class)
+			//@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+			/*FlowRow(
 				modifier = Modifier.fillMaxWidth()
+			) {*/
+			FlowRow(
+				modifier = Modifier.fillMaxWidth(),
+				horizontalArrangement = Arrangement.spacedBy(4.dp),
+				verticalArrangement = Arrangement.spacedBy(4.dp)
 			) {
 				filters.tagFilters.forEach { tag ->
 					SuggestionChip(
@@ -266,7 +292,7 @@ private fun ActiveFiltersBar(
 		}
 	}
 }
-
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PasswordListItem(
     entry: PasswordEntry,
@@ -274,7 +300,7 @@ fun PasswordListItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    @OptIn(ExperimentalMaterial3Api::class)
+   // @OptIn(ExperimentalMaterial3Api::class)
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val state = rememberSwipeToDismissBoxState(
@@ -345,7 +371,8 @@ fun PasswordListItem(
 		            verticalArrangement = Arrangement.spacedBy(8.dp)
 	            ) {
 		            Text(
-			            text = "Resource: ${entry.resourceName}",
+			            //text = "Resource: ${entry.resourceName}",
+			            text = entry.resourceName,
 			            style = MaterialTheme.typography.titleMedium
 		            )
 		            Text(
@@ -424,7 +451,8 @@ private fun EmptyStateView(
 }
 
 // ==================== Filter Bottom Sheet ====================
-@OptIn(ExperimentalMaterial3Api::class)
+//@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FilterBottomSheet(
 	onDismiss: () -> Unit,
@@ -480,7 +508,8 @@ fun FilterBottomSheet(
 
 			// Выбранные теги
 			if (tagFilters.isNotEmpty()) {
-				@OptIn(ExperimentalLayoutApi::class)
+				//@OptIn(ExperimentalLayoutApi::class)
+				//@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 				FlowRow(
 					horizontalArrangement = Arrangement.spacedBy(4.dp),
 					verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -526,8 +555,8 @@ fun FilterBottomSheet(
 				modifier = Modifier.fillMaxWidth()
 			)
 
-			// Быстрые теги (можно заменить на загрузку из DataStore)
-			val quickTags = listOf("work", "personal", "finance", "social", "shopping", "other")
+			/*// Быстрые теги (можно заменить на загрузку из DataStore)
+			val quickTags = listOf("www", "PC", "моб", "покупки", "работа", "проч")
 			if (quickTags.any { it !in tagFilters }) {
 				Spacer(modifier = Modifier.height(8.dp))
 				Text(
@@ -551,7 +580,7 @@ fun FilterBottomSheet(
 							)
 						}
 				}
-			}
+			}*/
 
 			Spacer(modifier = Modifier.weight(1f))
 
@@ -592,9 +621,11 @@ private fun SettingsDialog(
 @Preview(showBackground = true, name = "MainScreen Light")
 @Composable
 private fun MainScreenPreviewLight() {
+	val navController = rememberNavController()
+
 	MyKlyuchikTheme(darkTheme = false) {
-		// Для превью используем мок-данные
 		MainScreen(
+			navController = navController,
 			onAddEntry = {},
 			onEditEntry = {},
 			onDeleteEntry = {},
@@ -606,8 +637,11 @@ private fun MainScreenPreviewLight() {
 @Preview(showBackground = true, name = "MainScreen Dark")
 @Composable
 private fun MainScreenPreviewDark() {
+	val navController = rememberNavController()
+
 	MyKlyuchikTheme(darkTheme = true) {
 		MainScreen(
+			navController = navController,
 			onAddEntry = {},
 			onEditEntry = {},
 			onDeleteEntry = {},
@@ -615,3 +649,4 @@ private fun MainScreenPreviewDark() {
 		)
 	}
 }
+

@@ -247,7 +247,7 @@ class MainViewModel(
 		}
 	}
 
-	private suspend fun saveAndReload(entries: List<PasswordEntry>) {
+	 suspend fun saveAndReload(entries: List<PasswordEntry>) {
 		SecureStorage.saveEncrypted(entries, Constants.MASTER_PASSWORD, dataPath)
 		_uiState.update {
 			it.copy(
@@ -332,3 +332,17 @@ class MainViewModel(
 		}
 	}
 }
+/*class Factory(
+	private val context: Context,
+	private val assetManager: AssetManager
+) : ViewModelProvider.Factory {
+	@Suppress("UNCHECKED_CAST")
+	override fun <T : ViewModel> create(modelClass: Class<T>): T {
+		if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
+			return MainViewModel(context, assetManager) as T
+		}
+		throw IllegalArgumentException("Unknown ViewModel class")
+	}
+}
+*/
+//added 2026-06-15 as a fxi to refresh problem - is a duplicate

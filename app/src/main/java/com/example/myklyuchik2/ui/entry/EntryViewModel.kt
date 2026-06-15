@@ -5,7 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.utils.Constants
-
+import com.example.myklyuchik2.ui.main.MainViewModel
+import com.example.myklyuchik2.ui.main.model.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,7 +67,8 @@ sealed class EntryUiEvent {
 class EntryViewModel(
 	private val dataPath: String,
 	private val masterPassword: String,
-	private val onEvent: (EntryUiEvent) -> Unit
+	private val onEvent: (EntryUiEvent) -> Unit,
+	private val mainViewModel: MainViewModel // ← New parameter
 ) : ViewModel() {
 
 	private val _formState = MutableStateFlow(EntryFormState())
@@ -218,7 +220,7 @@ class EntryViewModel(
 
 				// 3. Сохраняем обратно
 				SecureStorage.saveEncrypted(entries, masterPassword, dataPath)
-
+				mainViewModel.saveAndReload(entries)
 				_formState.update { it.copy(isLoading = false) }
 				onEvent(EntryUiEvent.SaveSuccess)
 
@@ -240,14 +242,16 @@ class EntryViewModel(
 	}
 
 	// Factory для создания ViewModel с параметрами
-	class Factory(
-		private val dataPath: String,
-		private val masterPassword: String,
-		private val onEvent: (EntryUiEvent) -> Unit
+class Factory(
+	private val dataPath: String,
+	private val masterPassword: String,
+	private val onEvent: (EntryUiEvent) -> Unit,
+	private val mainViewModel: MainViewModel // ← New parameter
+
 	) : androidx.lifecycle.ViewModelProvider.Factory {
 		@Suppress("UNCHECKED_CAST")
 		override fun <T : ViewModel> create(modelClass: Class<T>): T {
-			return EntryViewModel(dataPath, masterPassword, onEvent) as T
+			return EntryViewModel(dataPath, masterPassword, onEvent, mainViewModel) as T
 		}
 	}
 }

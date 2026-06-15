@@ -47,15 +47,19 @@ dependencies {
     implementation libs.androidx.compose.ui.graphics
     implementation libs.androidx.compose.ui.tooling.preview
     implementation libs.androidx.compose.material3
+    // Foundation and Material Icons are now managed by BOM
+    implementation libs.androidx.compose.foundation
+    implementation libs.androidx.compose.material.iconsExtended
+    implementation libs.androidx.compose.material.iconsExtendedAndroid
+    // Use BOM-managed Compose dependencies where possible
+    // implementation "androidx.compose.foundation:swipetodismiss:1.11.2"  // Removed: artifact does not exist
     implementation "androidx.navigation:navigation-compose:2.7.7"
     implementation "androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0"
     implementation "androidx.lifecycle:lifecycle-runtime-compose:2.7.0"
     implementation "androidx.datastore:datastore-preferences:1.0.0"
-    implementation "androidx.compose.material:material-icons-extended-android:1.6.0"
-    implementation "androidx.activity:activity-compose:1.8.0"
-    implementation 'androidx.compose.ui:ui:1.5.0'
-    implementation 'androidx.compose.material3:material3:1.1.0'
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation libs.androidx.compose.material.iconsExtended
+    implementation libs.androidx.compose.material.iconsExtendedAndroid
     testImplementation libs.junit
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
