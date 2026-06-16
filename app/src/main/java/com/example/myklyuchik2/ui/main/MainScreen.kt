@@ -555,7 +555,7 @@ fun FilterBottomSheet(
 				modifier = Modifier.fillMaxWidth()
 			)
 
-			/*// Быстрые теги (можно заменить на загрузку из DataStore)
+			// Быстрые теги (можно заменить на загрузку из DataStore)
 			val quickTags = listOf("www", "PC", "моб", "покупки", "работа", "проч")
 			if (quickTags.any { it !in tagFilters }) {
 				Spacer(modifier = Modifier.height(8.dp))
@@ -580,7 +580,7 @@ fun FilterBottomSheet(
 							)
 						}
 				}
-			}*/
+			}
 
 			Spacer(modifier = Modifier.weight(1f))
 
