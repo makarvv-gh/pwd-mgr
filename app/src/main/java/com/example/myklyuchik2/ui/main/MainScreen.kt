@@ -169,6 +169,8 @@ fun MainScreen(
 						entry = entry ?: return@items, // Add null check
 						onEdit = { onEditEntry(entry) },
 						onDelete = {
+							//onDeleteEntry(entry)
+							viewModel.deleteEntry(entry)
 							// Показываем диалог подтверждения удаления
 							// (реализация ниже через showModal)
 							scope.launch {
@@ -178,7 +180,8 @@ fun MainScreen(
 									duration = SnackbarDuration.Short
 								)
 								if (result == SnackbarResult.ActionPerformed) {
-									onDeleteEntry(entry)
+									//onDeleteEntry(entry)
+									viewModel.deleteEntry(entry)
 								}
 							}
 						}
@@ -395,7 +398,7 @@ fun PasswordListItem(
                 TextButton(
                     onClick = {
                         onDelete()
-                        showDeleteConfirm = false
+						showDeleteConfirm = false
                     },
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.error

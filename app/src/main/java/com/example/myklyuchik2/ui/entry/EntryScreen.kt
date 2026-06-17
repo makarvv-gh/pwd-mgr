@@ -173,14 +173,14 @@ fun EntryScreen(
 				modifier = Modifier.fillMaxWidth()
 			)
 
-			// === Дата изменения пароля (только просмотр) ===
+			// === Дата изменения пароля  ===
 			OutlinedTextField(
 				value = state.changeDate,
 				onValueChange = viewModel::updateChangeDate,
 				label = { Text("Датаизменения пароля") },
 				placeholder = { Text("Например: 2024-01-15") },
 				singleLine = true,
-				//enabled=true,// Разрешаем редактирование — пользователь меняет вручную
+				enabled=true,
 				readOnly = false,
 				keyboardOptions = KeyboardOptions(
 					keyboardType = KeyboardType.Text,
