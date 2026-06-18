@@ -179,7 +179,8 @@ class MainViewModel(
 					entry.resourceName.contains(filters.searchQuery, ignoreCase = true) ||
 					entry.login.contains(filters.searchQuery, ignoreCase = true)
 			val matchesTags = filters.tagFilters.isEmpty() ||
-					filters.tagFilters.all { tag -> entry.tags.any { it.equals(tag, ignoreCase = true) } }
+					//filters.tagFilters.all { tag -> entry.tags.any { it.equals(tag, ignoreCase = true) } }
+					filters.tagFilters.all { tag -> entry.tags.any { it.compareTo(tag, ignoreCase = true) == 0 } }
 			matchesSearch && matchesTags
 		}
 	}
