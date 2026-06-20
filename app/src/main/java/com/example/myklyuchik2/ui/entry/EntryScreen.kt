@@ -1,4 +1,4 @@
-package com.example.myklyuchik2.ui.entry
+ package com.example.myklyuchik2.ui.entry
 
 import android.util.Log
 import androidx.compose.ui.platform.LocalContext

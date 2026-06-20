@@ -14,6 +14,7 @@ import com.example.myklyuchik2.ui.main.MainScreen
 import com.example.myklyuchik2.ui.splash.SplashScreen
 import com.example.myklyuchik2.ui.settings.SettingsScreen
 import com.example.myklyuchik2.ui.main.MainViewModel
+import com.example.myklyuchik2.ui.settings.ChangePasswordScreen
 
 sealed class Screen(val route: String) {
 	object Splash : Screen("splash")
@@ -66,12 +67,16 @@ fun AppNavHost(
 				onNavigateBack = { navController.popBackStack() },
 				onImportCsv = { /* Handle import CSV action */ },
 				onExportCsv = { /* Handle export CSV action */ },
-				onChangePassword = { /* Handle change password action */ },
+				onChangePassword = { navController.navigate("change-password") },
 				onCloudClick = { /* Handle cloud sync action */ }
 			)
 		}
-		// В AppNavHost.kt, в комментах к Screen.Entry:
 
+		composable("change-password") {
+			ChangePasswordScreen(navController = navController)
+		}
+
+		// В AppNavHost.kt, в комментах к Screen.Entry:
 		composable(
 			route = Screen.Entry.route,
 			arguments = listOf(

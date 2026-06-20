@@ -38,7 +38,7 @@ fun SettingsScreen(
 		// navController.navigateUp()
 	onImportCsv: () -> Unit,
 	onExportCsv: () -> Unit,
-	onChangePassword: () -> Unit,
+	onChangePassword: () -> Unit = { navController.navigate("change-password") },
 	onCloudClick: () -> Unit // пока заглушка
 ) {
 	Scaffold(
@@ -84,8 +84,8 @@ fun SettingsScreen(
 					title = "Смена мастер-пароля",
 					icon = Icons.Default.Lock,
 					onClick = onChangePassword,
-					enabled = false, // заглушка
-					trailing = { Badge { Text("Coming Soon") } }
+					enabled = true, // Now enabled
+					trailing = null
 				)
 			}
 
