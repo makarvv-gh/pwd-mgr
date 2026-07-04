@@ -2,68 +2,64 @@ package com.example.myklyuchik2.data.repository
 
 import android.content.Context
 import com.example.myklyuchik2.data.storage.SecurePasswordStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class PasswordRepository(context: Context) {
-	private val securePasswordStorage = SecurePasswordStorage(context)
-	private var encryptedPassword: String? = null
-
+class PasswordRepository private constructor(context: Context) {
 	companion object {
 		@Volatile
-		private var INSTANCE: PasswordRepository? = null
+		private var instance: PasswordRepository? = null
 
 		fun getInstance(context: Context): PasswordRepository {
-			return INSTANCE ?: synchronized(this) {
-				val instance = PasswordRepository(context)
-				INSTANCE = instance
-				instance
+			return instance ?: synchronized(this) {
+				PasswordRepository(context).also { instance = it }
 			}
 		}
-		// Temporary migration constant
-		private const val LEGACY_MASTER_PASSWORD = "master123"
 	}
-/* боевая версия
-	init {
-		// Initialize with default password if no password is stored yet
-		if (encryptedPassword == null) {
-			encryptedPassword = securePasswordStorage.encrypt("default_master_password")
+
+	private val securePasswordStorage = SecurePasswordStorage.getInstance(context)
+
+	suspend fun getCurrentPassword(): String? = withContext(Dispatchers.IO) {
+		securePasswordStorage.decryptPassword()
+	}
+
+	suspend fun isPasswordSet(): Boolean = securePasswordStorage.isPasswordSet()
+
+	suspend fun changePassword(oldPassword: String, newPassword: String): Boolean {
+		// Validate inputs
+		if (oldPassword.isEmpty() || newPassword.isEmpty()) {
+			return false
 		}
-	}*/
-init {
-	// Try to get password from storage
-	encryptedPassword = try {
-		// Try to decrypt existing password
-		val encrypted = securePasswordStorage.decrypt(LEGACY_MASTER_PASSWORD)
-		encrypted?.let {
-			// If we can decrypt it, store it in the new format
-			encryptedPassword = securePasswordStorage.encrypt(it)
-			encryptedPassword
-		} ?: run {
-			// If not, check if storage is empty and use legacy password
-			if (securePasswordStorage is SecurePasswordStorage && encryptedPassword == null) {
-				securePasswordStorage.encrypt(LEGACY_MASTER_PASSWORD)
-			} else {
-				null
+
+		return try {
+			// Get current password from storage
+			val currentPassword = getCurrentPassword() ?: return false
+
+			// Constant-time comparison
+			if (!constantTimeCompare(oldPassword, currentPassword)) {
+				return false
 			}
+
+			// Update with new password
+			val success = securePasswordStorage.encryptAndStorePassword(newPassword)
+			if (!success) {
+				return false
+			}
+
+			// Round-trip verification
+			val verifyPassword = getCurrentPassword()
+			verifyPassword != null && constantTimeCompare(verifyPassword, newPassword)
+		} catch (e: Exception) {
+			e.printStackTrace()
+			false
 		}
-	} catch (e: Exception) {
-		// If decryption fails, use legacy password
-		securePasswordStorage.encrypt(LEGACY_MASTER_PASSWORD)
-	}
-}
-	fun getMasterPassword(): String? {
-		encryptedPassword?.let { encrypted ->
-			return securePasswordStorage.decrypt(encrypted)
-		}
-		return null
 	}
 
-	fun updateMasterPassword(newPassword: String): Boolean {
-		encryptedPassword = securePasswordStorage.encrypt(newPassword)
-		return encryptedPassword != null
-	}
-
-	fun verifyPassword(inputPassword: String): Boolean {
-		val storedPassword = getMasterPassword()
-		return inputPassword == storedPassword
+	private fun constantTimeCompare(a: String, b: String): Boolean {
+		var result = 0
+		for (i in 0 until a.length.coerceAtMost(b.length)) {
+			result = result or (a[i].code xor b[i].code)
+		}
+		return result == 0 && a.length == b.length
 	}
 }

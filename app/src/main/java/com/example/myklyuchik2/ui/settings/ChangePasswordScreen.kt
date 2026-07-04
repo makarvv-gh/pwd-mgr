@@ -21,25 +21,31 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.KeyboardType
-//import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-//import com.example.myklyuchik2.utils.Constants
-
-//import androidx.compose.ui.input.key.Key
-
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import com.example.myklyuchik2.data.storage.SecurePasswordStorage
 import com.example.myklyuchik2.data.repository.PasswordRepository
+import com.example.myklyuchik2.BiometricAuthManager
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.security.keystore.KeyProperties
+import android.security.keystore.KeyGenParameterSpec
+import android.os.Build
+import android.util.Log
+import javax.crypto.Cipher
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import androidx.biometric.BiometricPrompt
+import androidx.biometric.BiometricManager
+import androidx.core.content.ContextCompat
+import androidx.compose.material3.Button as BButton
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentActivity
+import android.content.Context
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,16 +53,73 @@ fun ChangePasswordScreen(navController: NavController) {
 	val context = LocalContext.current
 	val passwordRepository = remember { PasswordRepository.getInstance(context) }
 	val focusManager = LocalFocusManager.current
+	val biometricManager = remember { BiometricAuthManager(context) }
+	val scope = rememberCoroutineScope()
 
 	var oldPassword by remember { mutableStateOf(TextFieldValue("")) }
 	var newPassword by remember { mutableStateOf(TextFieldValue("")) }
-	var confirmPassword by remember { mutableStateOf(TextFieldValue("")) }
-
-	var error by remember { mutableStateOf("") }
 	var showSuccess by remember { mutableStateOf(false) }
+	var error by remember { mutableStateOf("") }
+
+	val biometricPrompt by remember {
+		mutableStateOf(
+			BiometricPrompt(
+				context as FragmentActivity,
+				ContextCompat.getMainExecutor(context),
+				object : BiometricPrompt.AuthenticationCallback() {
+					override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+						super.onAuthenticationSucceeded(result)
+						// Handle success — e.g., proceed with changing the password
+						scope.launch {
+							val success = passwordRepository.changePassword(oldPassword.text, newPassword.text)
+							if (success) {
+								showSuccess = true
+								error = ""
+							} else {
+								error = "Не удалось обновить пароль"
+							}
+						}
+					}
+
+					override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+						super.onAuthenticationError(errorCode, errString)
+						// Handle error — e.g., show a message
+						Log.e("BiometricPrompt", "Authentication error: $errString")
+					}
+
+					override fun onAuthenticationFailed() {
+						super.onAuthenticationFailed()
+						// Handle failure — e.g., fall back to password input
+						Log.d("BiometricPrompt", "Authentication failed")
+					}
+				}
+			)
+		)
+	}
+
+
+	val promptInfo by remember {
+		mutableStateOf(
+			BiometricPrompt.PromptInfo.Builder()
+				.setTitle("Биометрическая аутентификация")
+				.setSubtitle("Используйте отпечаток пальца для аутентификации")
+				//.setNegativeButtonText("Отмена")
+				.setAllowedAuthenticators(
+					BiometricManager.Authenticators.BIOMETRIC_STRONG or
+							BiometricManager.Authenticators.DEVICE_CREDENTIAL
+				)
+				.build()
+		)
+	}
+
+	//var oldPassword by remember { mutableStateOf(TextFieldValue("")) }
+	//var newPassword by remember { mutableStateOf(TextFieldValue("")) }
+	var confirmPassword by remember { mutableStateOf(TextFieldValue("")) }
+	//var error by remember { mutableStateOf("") }
+	//var showSuccess by remember { mutableStateOf(false) }
+	var showBiometricPrompt by remember { mutableStateOf(false) }
 
 	val snackbarHostState = remember { SnackbarHostState() }
-	val scope = rememberCoroutineScope()
 
 	MyKlyuchikTheme {
 		Scaffold(
@@ -127,9 +190,6 @@ fun ChangePasswordScreen(navController: NavController) {
 						keyboardType = KeyboardType.Password,
 						imeAction = ImeAction.Done
 					),
-					/*onKeyboardAction = {
-						focusManager.clearFocus()
-					},*/
 					singleLine = true
 				)
 
@@ -142,42 +202,36 @@ fun ChangePasswordScreen(navController: NavController) {
 					)
 				}
 
-				Button(
+				BButton(
 					onClick = {
 						// Validate inputs
 						if (oldPassword.text.isEmpty() || newPassword.text.isEmpty() || confirmPassword.text.isEmpty()) {
 							error = "Все поля должны быть заполнены"
-							return@Button
-						}
-
-						/*if (oldPassword.text != Constants.MASTER_PASSWORD) {
-							error = "Текущий пароль неверен"
-							return@Button
-						}*/
-
-						val currentPassword = passwordRepository.getMasterPassword()
-						if (oldPassword.text != currentPassword) {
-							error = "Текущий пароль неверен"
-							return@Button
+							return@BButton
 						}
 
 						if (newPassword.text != confirmPassword.text) {
 							error = "Новые пароли не совпадают"
-							return@Button
+							return@BButton
 						}
 
-						// In a real app, you would securely update the master password
-						// For this example, we'll just show a success dialog
-						//showSuccess = true
-						//error = ""
+						// Check biometric availability before showing prompt
+						val canAuthenticate = biometricManager.canAuthenticate()
 
-						// Update the master password
-						val success = passwordRepository.updateMasterPassword(newPassword.text)
-						if (success) {
-							showSuccess = true
-							error = ""
+						if (canAuthenticate == BiometricManager.BIOMETRIC_SUCCESS) {
+							// Biometric authentication is available, show the prompt
+							showBiometricPrompt = true
 						} else {
-							error = "Не удалось обновить пароль"
+							// Biometric not available, proceed with regular password change flow
+							scope.launch {
+								val success = passwordRepository.changePassword(oldPassword.text, newPassword.text)
+								if (success) {
+									showSuccess = true
+									error = ""
+								} else {
+									error = "Не удалось обновить пароль"
+								}
+							}
 						}
 					},
 					modifier = Modifier.align(Alignment.End)
@@ -203,7 +257,20 @@ fun ChangePasswordScreen(navController: NavController) {
 						}
 					)
 				}
+
+				if (showBiometricPrompt) {
+					LaunchedEffect(Unit) {
+						try {
+							biometricPrompt.authenticate(promptInfo)
+						} catch (e: Exception) {
+							Log.e("BiometricPrompt", "Authentication failed", e)
+							// Handle error or fallback
+						}
+					}
+				}
 			}
 		}
 	}
+
 }
+

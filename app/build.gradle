@@ -54,6 +54,7 @@ dependencies {
     implementation "androidx.lifecycle:lifecycle-runtime-compose:2.7.0"
     implementation "androidx.datastore:datastore-preferences:1.0.0"
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'androidx.biometric:biometric:1.2.0-alpha04'
     implementation libs.androidx.compose.material.iconsExtended
     implementation libs.androidx.compose.material.iconsExtendedAndroid
     testImplementation libs.junit
