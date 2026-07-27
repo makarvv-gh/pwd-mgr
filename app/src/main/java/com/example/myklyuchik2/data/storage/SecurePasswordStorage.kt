@@ -12,6 +12,7 @@ import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
+import javax.crypto.spec.SecretKeySpec
 import javax.crypto.spec.GCMParameterSpec
 import androidx.core.content.edit
 import kotlinx.coroutines.*
@@ -47,21 +48,13 @@ class SecurePasswordStorage private constructor(context: Context) {
 			generateKey(context)
 		}
 
-		// Initialize encrypted shared preferences
-		/*val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-		encryptedSharedPreferences = EncryptedSharedPreferences.create(
-			ENCRYPTED_PREFS_NAME,
-			masterKey,
-			context,
-			EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-			EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_SIV
-		)*/
-
 		// First-use initialization
 		if (!isPasswordSet()) {
 			Log.d("SecurePasswordStorage", "First-use initialization: seeding Keystore with legacy master password")
-			CoroutineScope(Dispatchers.IO).launch {
-				encryptAndStorePassword(LEGACY_MASTER_PASSWORD)
+			//CoroutineScope(Dispatchers.IO).launch {
+			runBlocking {
+				val success = encryptAndStorePassword(LEGACY_MASTER_PASSWORD)
+				Log.d("SecurePasswordStorage", "Legacy password stored: $success")
 			}
 			// TODO: Remove after first-login flow is implemented
 		}
@@ -72,6 +65,7 @@ class SecurePasswordStorage private constructor(context: Context) {
 		when (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)) {
 			BiometricManager.BIOMETRIC_SUCCESS -> {
 				// Biometric is available and enrolled
+				Log.e("SecurePasswordStorage", "Biometric is available and enrolled")
 				val keyGenSpec = KeyGenParameterSpec.Builder(
 					KEY_ALIAS,
 					KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
@@ -81,7 +75,7 @@ class SecurePasswordStorage private constructor(context: Context) {
 					.setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
 					.setKeyValidityStart(null) // Remove validity start
 					.setKeyValidityEnd(null)   // Remove validity end
-					.setUserAuthenticationRequired(true)
+					.setUserAuthenticationRequired(false)
 					.build()
 
 				val keyGenerator = javax.crypto.KeyGenerator.getInstance(
@@ -103,11 +97,11 @@ class SecurePasswordStorage private constructor(context: Context) {
 			}
 			else -> {
 				// Biometric is not available or another error occurred
-				Log.e("SecurePasswordStorage", "Biometric not available")
+				Log.e("SecurePasswordStorage", "Biometric not available or smth")
 			}
 		}
 	}
-
+//TODO: REMOVE IN PRODUCTION
 	private fun getKeyInfo(): KeyInfo? {
 		return run {
 			val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry ?: run {
@@ -119,32 +113,54 @@ class SecurePasswordStorage private constructor(context: Context) {
 				Log.d("SecurePasswordStorage", "Key is null")
 				return@run null
 			}
+			val keyInfo = key as? KeyInfo
+			Log.d("SecurePasswordStorage", "Key is inside secure hardware: ${keyInfo?.isInsideSecureHardware}")
+			Log.d("SecurePasswordStorage", "Key is user-authentication required: ${keyInfo?.isUserAuthenticationRequired}")
 
 			key as? KeyInfo
 		}
 	}
+	//TODO: REMOVE IN PRODUCTION
+	private fun logKeyInfo(key: SecretKey?) {
+		if (key == null) {
+			Log.e("SecurePasswordStorage", "Key is null")
+			return
+		}
 
-	suspend fun encryptAndStorePassword(password: String): Boolean = withContext(Dispatchers.IO) {
+		Log.d("SecurePasswordStorage", "Key algorithm: ${key.algorithm}")
+		Log.d("SecurePasswordStorage", "Key format: ${key.format}")
+		Log.d("SecurePasswordStorage", "Key encoded length: ${key.encoded.size}")
+	}
+	//suspend fun encryptAndStorePassword(password: String): Boolean = withContext(Dispatchers.IO) {
+	fun encryptAndStorePassword(password: String): Boolean {
 		try {
 			val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-			//val key = keyStore.getKey(KEY_ALIAS, null) as SecretKey
 			val key = keyStore.getKey(KEY_ALIAS, null) as? SecretKey
-				?: return@withContext false
-			cipher.init(Cipher.ENCRYPT_MODE, key)
+			//logKeyInfo(key)
+			Log.d("SecurePasswordStorage", "Generated key class: ${key?.javaClass?.name}")
+			/*val keyBytes = "0123456789abcdef".toByteArray() // 16 bytes = AES-128
+			val key = SecretKeySpec(keyBytes, "AES")*/
+			Log.d("SecurePasswordStorage", "encryptAndStorePassword called with password: $password")
+			if (key == null) {
+				Log.e("SecurePasswordStorage", "Failed to retrieve secret key")
+				return false
+			}
 
+			cipher.init(Cipher.ENCRYPT_MODE, key)
 			val iv = cipher.getIV()
+			Log.d("SecurePasswordStorage", "Encryption IV: ${iv.joinToString { "%02x".format(it) }}")
 			val encryptedBytes = cipher.doFinal(password.toByteArray())
 
-			// Store IV and encrypted password
 			sharedPreferences.edit {
 				putString(IV_KEY, Base64.encodeToString(iv, Base64.DEFAULT))
 				putString(PASSWORD_KEY, Base64.encodeToString(encryptedBytes, Base64.DEFAULT))
 			}
 
-			true
+			Log.d("SecurePasswordStorage", "encryptAndStorePassword - successful completion")
+			return true
 		} catch (e: Exception) {
-			e.printStackTrace()
-			false
+			Log.e("SecurePasswordStorage", "Exception during encryptAndStorePassword", e)
+			return false
 		}
 	}
 
@@ -158,11 +174,21 @@ class SecurePasswordStorage private constructor(context: Context) {
 			}
 
 			val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-			//val key = keyStore.getKey(KEY_ALIAS, null) as SecretKey
+			/*val TEST_KEY_BYTES = "0123456789abcdef".toByteArray() // 16 bytes = AES-128
+			val key = SecretKeySpec(TEST_KEY_BYTES, "AES")*/
 			val key = keyStore.getKey(KEY_ALIAS, null) as? SecretKey ?: return@withContext null
+			//logKeyInfo(key)
+			Log.d("SecurePasswordStorage", "Generated key class: ${key?.javaClass?.name}")
+			//match IV string to one created during encryption
+			val ivBytes = Base64.decode(iv, Base64.DEFAULT)
+			Log.d("SecurePasswordStorage", "Decryption IV: ${ivBytes.joinToString { "%02x".format(it) }}")
+
 			val ivSpec = GCMParameterSpec(128, Base64.decode(iv, Base64.DEFAULT))
 
 			cipher.init(Cipher.DECRYPT_MODE, key, ivSpec)
+
+			//val testEncrypt = cipher.doFinal("test".toByteArray())
+			//Log.d("SecurePasswordStorage", "Test encryption succeeded")
 			val decryptedBytes = cipher.doFinal(Base64.decode(encryptedPassword, Base64.DEFAULT))
 
 			String(decryptedBytes)
