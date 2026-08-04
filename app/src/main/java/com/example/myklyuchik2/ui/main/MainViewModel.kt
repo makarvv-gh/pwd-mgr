@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.myklyuchik2.data.importexport.CsvImporter
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.JsonStorage
+import com.example.myklyuchik2.data.storage.SecurePasswordStorage
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.ui.main.model.UiEvent
 import com.example.myklyuchik2.ui.main.model.UiState
@@ -49,12 +50,17 @@ class MainViewModel(
 		viewModelScope.launch {
 			_uiState.update { it.copy(isLoading = true) }
 			try {
-				val entries = SecureStorage.loadEncrypted(dataPath, Constants.MASTER_PASSWORD)
+				val storage = SecurePasswordStorage.getInstance(context)
+				val decryptedPassword = storage.decryptPassword() ?: run {
+					_uiState.update { it.copy(error = "Не удалось расшифровать данные") }
+					return@launch
+				}
+
+				val entries = SecureStorage.loadEncrypted(dataPath, decryptedPassword)
 				_uiState.update {
 					it.copy(
 						isLoading = false,
 						allEntries = entries,
-						//filteredEntries = entries,
 						filteredEntries = applyFilters(entries, it.filters)
 					)
 				}
@@ -70,8 +76,9 @@ class MainViewModel(
 			_uiState.update { it.copy(isLoading = true) }
 			try {
 				val entries = CsvImporter.importFromAssets(assetManager, fileName)
-				JsonStorage.saveToJsonFile(entries, tempJsonPath)
-				SecureStorage.saveEncrypted(entries, Constants.MASTER_PASSWORD, dataPath)
+				val storage = SecurePasswordStorage.getInstance(context)
+				val decryptedPassword = storage.decryptPassword() ?: return@launch
+				SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
 				loadEntries()
 				_events.send(UiEvent.ShowSuccess("Импортировано ${entries.size} записей"))
 			} catch (e: Exception) {
@@ -110,8 +117,10 @@ class MainViewModel(
 		}
 	}
 
-	 suspend fun saveAndReload(entries: List<PasswordEntry>) {
-		SecureStorage.saveEncrypted(entries, Constants.MASTER_PASSWORD, dataPath)
+	suspend fun saveAndReload(entries: List<PasswordEntry>) {
+		val storage = SecurePasswordStorage.getInstance(context)
+		val decryptedPassword = storage.decryptPassword() ?: return
+		SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
 		_uiState.update {
 			it.copy(
 				allEntries = entries,
@@ -182,6 +191,16 @@ class MainViewModel(
 					//filters.tagFilters.all { tag -> entry.tags.any { it.equals(tag, ignoreCase = true) } }
 					filters.tagFilters.all { tag -> entry.tags.any { it.compareTo(tag, ignoreCase = true) == 0 } }
 			matchesSearch && matchesTags
+		}
+	}
+
+	suspend fun getDecryptedPassword(): Result<String> {
+		val storage = SecurePasswordStorage.getInstance(context)
+		return try {
+			val decryptedPassword = storage.decryptPassword() ?: throw Exception("Password decryption failed")
+			Result.success(decryptedPassword)
+		} catch (e: Exception) {
+			Result.failure(e)
 		}
 	}
 

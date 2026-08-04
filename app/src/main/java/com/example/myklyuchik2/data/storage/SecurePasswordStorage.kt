@@ -20,14 +20,16 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import android.os.CancellationSignal
 
+private const val KEY_ALIAS = "master_password_key"
+private const val SHARED_PREFS_NAME = "secure_password_prefs"
+private const val PASSWORD_KEY = "encrypted_password"
+private const val IV_KEY = "password_iv"
 class SecurePasswordStorage private constructor(context: Context) {
+	private val keyStore: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+	private val sharedPreferences: SharedPreferences = context.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
+
 	companion object {
-		private const val KEY_ALIAS = "master_password_key"
-		private const val LEGACY_MASTER_PASSWORD = "master123"
-		private const val ENCRYPTED_PREFS_NAME = "secure_password_prefs"
-		private const val SHARED_PREFS_NAME = "secure_password_prefs"
-		private const val PASSWORD_KEY = "encrypted_password"
-		private const val IV_KEY = "password_iv"
+
 
 		@Volatile
 		private var instance: SecurePasswordStorage? = null
@@ -39,26 +41,37 @@ class SecurePasswordStorage private constructor(context: Context) {
 		}
 	}
 
-	private val keyStore: KeyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-	private val sharedPreferences: SharedPreferences = context.getSharedPreferences(SHARED_PREFS_NAME, Context.MODE_PRIVATE)
 
 	init {
 		// Initialize Keystore key
-		if (!keyStore.containsAlias(KEY_ALIAS)) {
-			generateKey(context)
+		try {
+			if (!keyStore.containsAlias(KEY_ALIAS)) {
+				generateKey(context)
+			}
+		} catch (e: Exception) {
+			Log.e("SecurePasswordStorage", "Error checking keystore alias", e)
 		}
 
 		// First-use initialization
-		if (!isPasswordSet()) {
+		/*if (!isPasswordSet()) {
 			Log.d("SecurePasswordStorage", "First-use initialization: seeding Keystore with legacy master password")
 			//CoroutineScope(Dispatchers.IO).launch {
 			runBlocking {
 				val success = encryptAndStorePassword(LEGACY_MASTER_PASSWORD)
 				Log.d("SecurePasswordStorage", "Legacy password stored: $success")
-			}
+			}*/
 			// TODO: Remove after first-login flow is implemented
-		}
+		/*fun initializeWithPassword(password: String): Boolean {
+			return encryptAndStorePassword(password)
+		}*/
+
 	}
+	// Move initializeWithPassword outside of init block
+	// TODO: Remove after first-login flow is implemented
+	fun initializeWithPassword(password: String): Boolean {
+		return encryptAndStorePassword(password)
+	}
+	//}
 
 	private fun generateKey(context: Context) {
 		val biometricManager = BiometricManager.from(context)
@@ -163,8 +176,8 @@ class SecurePasswordStorage private constructor(context: Context) {
 			return false
 		}
 	}
-
 	suspend fun decryptPassword(): String? = withContext(Dispatchers.IO) {
+	 //fun decryptPassword(): String? = withContext(Dispatchers.IO) {
 		try {
 			val encryptedPassword = sharedPreferences.getString(PASSWORD_KEY, null)
 			val iv = sharedPreferences.getString(IV_KEY, null)

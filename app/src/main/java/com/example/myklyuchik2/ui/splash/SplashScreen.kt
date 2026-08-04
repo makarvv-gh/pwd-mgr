@@ -7,15 +7,23 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.CoroutineScope
 import com.example.myklyuchik2.R
+import com.example.myklyuchik2.data.storage.SecurePasswordStorage
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.utils.Constants
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 
 @Composable
 fun SplashScreen(
@@ -24,6 +32,9 @@ fun SplashScreen(
 ) {
 	var password by remember { mutableStateOf("") }
 	var isError by remember { mutableStateOf(false) }
+	val focusRequester = remember { FocusRequester() }
+	val coroutineScope = rememberCoroutineScope()
+	val lifecycleOwner = LocalLifecycleOwner.current
 
 	Column(
 		modifier = modifier
@@ -78,11 +89,15 @@ fun SplashScreen(
 
 		Button(
 			onClick = {
-				if (password == Constants.MASTER_PASSWORD) {
-					onAuthenticated()
-				} else {
-					isError = true
-				}
+				// Move the coroutine to the lifecycleOwner's scope
+				launchAndAuthenticate(
+					password = password,
+					coroutineScope = coroutineScope,
+					lifecycleOwner = lifecycleOwner,
+					onAuthenticated = onAuthenticated,
+					isError = isError,
+					setIsError = { newError -> isError = newError }
+				)
 			},
 			modifier = Modifier.fillMaxWidth(0.8f)
 		) {
@@ -90,7 +105,36 @@ fun SplashScreen(
 		}
 	}
 }
+private fun launchAndAuthenticate(
+	password: String,
+	coroutineScope: CoroutineScope,
+	lifecycleOwner: LifecycleOwner,
+	onAuthenticated: () -> Unit,
+	isError: Boolean,
+	setIsError: (Boolean) -> Unit
+) {
+	// Move the context access inside the coroutineScope.launch
+	coroutineScope.launch {
+		// Get the context from the lifecycleOwner's context
+		val context = lifecycleOwner as? android.content.Context
+			?: run {
+				// Use a regular function to handle the case where context is not available
+				setIsError(true)
+				return@launch
+			}
 
+		// Get the storage instance
+		val storage = SecurePasswordStorage.getInstance(context)
+		val decryptedPassword = storage.decryptPassword()
+
+		// Handle authentication
+		if (password == decryptedPassword) {
+			onAuthenticated()
+		} else {
+			setIsError(true)
+		}
+	}
+}
 @Preview(showBackground = true)
 @Composable
 private fun SplashScreenPreview() {

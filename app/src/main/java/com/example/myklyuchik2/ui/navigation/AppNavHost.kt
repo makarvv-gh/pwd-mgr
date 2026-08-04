@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.navArgument
 import androidx.navigation.compose.composable
@@ -15,6 +16,8 @@ import com.example.myklyuchik2.ui.splash.SplashScreen
 import com.example.myklyuchik2.ui.settings.SettingsScreen
 import com.example.myklyuchik2.ui.main.MainViewModel
 import com.example.myklyuchik2.ui.settings.ChangePasswordScreen
+import com.example.myklyuchik2.ui.splash.FirstTimeSetupScreen
+import com.example.myklyuchik2.utils.Constants
 
 sealed class Screen(val route: String) {
 	object Splash : Screen("splash")
@@ -30,10 +33,12 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun AppNavHost(
-	navController: NavHostController,
+	navController: NavHostController = rememberNavController(),
 	modifier: Modifier = Modifier,
-	startDestination: String = Screen.Splash.route
+	isFirstUse: Boolean = false
 ) {
+	val startDestination = if (isFirstUse) "first_time" else "splash"
+
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,
@@ -41,8 +46,25 @@ fun AppNavHost(
 	) {
 		composable(Screen.Splash.route) {
 			SplashScreen(
-				onAuthenticated = { navController.navigate(Screen.Main.route) { popUpTo(Screen.Splash.route) { inclusive = true } } }
+				onAuthenticated = { navController.navigate(Screen.Main.route) {
+					popUpTo(Screen.Splash.route) { inclusive = true }
+				} }
 			)
+		}
+
+		/*composable("first_time") {
+			FirstTimeSetupScreen(onPasswordCreated = { password ->
+				navController.navigate(Screen.Main.route) {
+					popUpTo("first_time") { inclusive = true }
+				}
+			})
+		}*/
+		composable("first_time") {
+			FirstTimeSetupScreen { password ->
+				navController.navigate(Screen.Main.route) {
+					popUpTo("first_time") { inclusive = true }
+				}
+			}
 		}
 		composable(Screen.Main.route) {
 			MainScreen(

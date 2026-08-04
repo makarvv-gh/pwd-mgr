@@ -43,26 +43,14 @@ fun EntryScreen(
 	entryId: String?,
 	onSaved: () -> Unit,
 	onDiscard: () -> Unit,
-	mainViewModel: MainViewModel, // ← Add this
+	mainViewModel: MainViewModel,
 	viewModel: EntryViewModel = viewModel(
 		factory = EntryViewModel.Factory(
 			dataPath = File(
 				LocalContext.current.filesDir,
 				"passwords.enc"
 			).absolutePath,
-			masterPassword = Constants.MASTER_PASSWORD,
-			onEvent = { event ->
-				when (event) {
-					is EntryUiEvent.SaveSuccess -> onSaved()
-					is EntryUiEvent.Discard -> onDiscard()
-					is EntryUiEvent.ShowError -> {
-						// Можно показатьSnackbar через LocalSnackbarHostState
-						// Для простоты пока выводим в лог
-						Log.e("EntryScreen", event.message)
-					}
-				}
-			},
-			mainViewModel = mainViewModel // ← Pass the mainViewModel here
+			mainViewModel = mainViewModel
 		)
 	),
 	modifier: Modifier = Modifier

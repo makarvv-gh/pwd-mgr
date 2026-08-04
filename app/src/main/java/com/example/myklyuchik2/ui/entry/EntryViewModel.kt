@@ -66,8 +66,6 @@ sealed class EntryUiEvent {
 // ==================== ViewModel ====================
 class EntryViewModel(
 	private val dataPath: String,
-	private val masterPassword: String,
-	private val onEvent: (EntryUiEvent) -> Unit,
 	private val mainViewModel: MainViewModel // ← New parameter
 ) : ViewModel() {
 
@@ -94,9 +92,21 @@ class EntryViewModel(
 	fun loadEntryForEdit(entryId: String) {
 		viewModelScope.launch {
 			try {
-				// Загружаем в IO-потоке, чтобы не блокировать UI
+				// Get decrypted password from MainViewModel
+				val passwordResult = withContext(Dispatchers.IO) {
+					mainViewModel.getDecryptedPassword()
+				}
+
+				if (passwordResult.isFailure) {
+					_formState.update { it.copy(isLoading = false, error = "Не удалось получить мастер-пароль: ${passwordResult.exceptionOrNull()?.message}") }
+					return@launch
+				}
+
+				val decryptedPassword = passwordResult.getOrNull()!!
+
+				// Load encrypted data
 				val entry = withContext(Dispatchers.IO) {
-					val entries = SecureStorage.loadEncrypted(dataPath, masterPassword)
+					val entries = SecureStorage.loadEncrypted(dataPath, decryptedPassword)
 					entries.find { it.id == entryId }
 				}
 
@@ -192,7 +202,6 @@ class EntryViewModel(
 					passwordError = if (it.password.isBlank()) "Обязательное поле" else null
 				)
 			}
-			onEvent(EntryUiEvent.ShowError("Заполните обязательные поля"))
 			return
 		}
 
@@ -200,8 +209,20 @@ class EntryViewModel(
 			_formState.update { it.copy(isLoading = true, error = null) }
 
 			try {
+				// 0. Get decrypted password from MainViewModel
+				val passwordResult = withContext(Dispatchers.IO) {
+					mainViewModel.getDecryptedPassword()
+				}
+
+				if (passwordResult.isFailure) {
+					_formState.update { it.copy(isLoading = false, error = "Не удалось получить мастер-пароль: ${passwordResult.exceptionOrNull()?.message}") }
+					return@launch
+				}
+
+				val decryptedPassword = passwordResult.getOrNull()!!
+
 				// 1. Загружаем текущий список
-				val entries = SecureStorage.loadEncrypted(dataPath, masterPassword).toMutableList()
+				val entries = SecureStorage.loadEncrypted(dataPath, decryptedPassword).toMutableList()
 
 				// 2. Создаём или обновляем запись
 				val newEntry = _formState.value.toPasswordEntry()
@@ -219,10 +240,9 @@ class EntryViewModel(
 				}
 
 				// 3. Сохраняем обратно
-				SecureStorage.saveEncrypted(entries, masterPassword, dataPath)
+				SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
 				mainViewModel.saveAndReload(entries)
 				_formState.update { it.copy(isLoading = false) }
-				onEvent(EntryUiEvent.SaveSuccess)
 
 			} catch (e: Exception) {
 				_formState.update {
@@ -231,27 +251,24 @@ class EntryViewModel(
 						error = "Ошибка сохранения: ${e.message}"
 					)
 				}
-				onEvent(EntryUiEvent.ShowError("Не удалось сохранить: ${e.message}"))
+
 			}
 		}
 	}
 
 	// Отмена без сохранения
 	fun discardChanges() {
-		onEvent(EntryUiEvent.Discard)
+		_formState.update { it.copy(isLoading = false) }
 	}
 
 	// Factory для создания ViewModel с параметрами
 class Factory(
 	private val dataPath: String,
-	private val masterPassword: String,
-	private val onEvent: (EntryUiEvent) -> Unit,
 	private val mainViewModel: MainViewModel // ← New parameter
-
 	) : androidx.lifecycle.ViewModelProvider.Factory {
 		@Suppress("UNCHECKED_CAST")
 		override fun <T : ViewModel> create(modelClass: Class<T>): T {
-			return EntryViewModel(dataPath, masterPassword, onEvent, mainViewModel) as T
+			return EntryViewModel(dataPath, mainViewModel) as T
 		}
 	}
 }
