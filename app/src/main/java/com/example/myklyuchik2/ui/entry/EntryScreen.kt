@@ -76,10 +76,14 @@ fun EntryScreen(
 		topBar = {
 			EntryTopAppBar(
 				title = if (mode == EntryMode.CREATE) "Новая запись" else "Редактирование",
-				onDiscard = { viewModel.discardChanges() },
+				onDiscard = {
+					viewModel.discardChanges()
+					onDiscard()
+				},
 				onSave = {
 					viewModel.saveEntry()
 					focusManager.clearFocus()
+					onSaved() // Add this to navigate back after save
 				},
 				isLoading = state.isLoading
 			)

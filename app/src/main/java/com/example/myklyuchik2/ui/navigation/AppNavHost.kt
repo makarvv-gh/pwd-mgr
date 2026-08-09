@@ -18,6 +18,7 @@ import com.example.myklyuchik2.ui.main.MainViewModel
 import com.example.myklyuchik2.ui.settings.ChangePasswordScreen
 import com.example.myklyuchik2.ui.splash.FirstTimeSetupScreen
 import com.example.myklyuchik2.utils.Constants
+import com.example.myklyuchik2.ui.splash.ErrorScreen
 
 sealed class Screen(val route: String) {
 	object Splash : Screen("splash")
@@ -66,6 +67,10 @@ fun AppNavHost(
 				}
 			}
 		}
+		composable("error") {
+			ErrorScreen(navController = navController)
+		}
+
 		composable(Screen.Main.route) {
 			MainScreen(
 				navController = navController,

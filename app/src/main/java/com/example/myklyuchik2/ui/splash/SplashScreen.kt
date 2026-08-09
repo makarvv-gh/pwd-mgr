@@ -1,5 +1,6 @@
 package com.example.myklyuchik2.ui.splash
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -87,13 +88,14 @@ fun SplashScreen(
 
 		Spacer(modifier = Modifier.height(24.dp))
 
+		val context = LocalContext.current
 		Button(
 			onClick = {
-				// Move the coroutine to the lifecycleOwner's scope
+				// Pass context to the non-composable function
 				launchAndAuthenticate(
 					password = password,
 					coroutineScope = coroutineScope,
-					lifecycleOwner = lifecycleOwner,
+					context = context, // Pass context here
 					onAuthenticated = onAuthenticated,
 					isError = isError,
 					setIsError = { newError -> isError = newError }
@@ -108,24 +110,22 @@ fun SplashScreen(
 private fun launchAndAuthenticate(
 	password: String,
 	coroutineScope: CoroutineScope,
-	lifecycleOwner: LifecycleOwner,
+	context: android.content.Context, // Accept context as a parameter
 	onAuthenticated: () -> Unit,
 	isError: Boolean,
 	setIsError: (Boolean) -> Unit
 ) {
-	// Move the context access inside the coroutineScope.launch
 	coroutineScope.launch {
-		// Get the context from the lifecycleOwner's context
-		val context = lifecycleOwner as? android.content.Context
-			?: run {
-				// Use a regular function to handle the case where context is not available
-				setIsError(true)
-				return@launch
-			}
+		// Use the passed-in context directly
+		if (context == null) {
+			setIsError(true)
+			return@launch
+		}
 
 		// Get the storage instance
 		val storage = SecurePasswordStorage.getInstance(context)
 		val decryptedPassword = storage.decryptPassword()
+		Log.d("SplashScreen", "decryptedPassword returned password: $decryptedPassword")
 
 		// Handle authentication
 		if (password == decryptedPassword) {
@@ -135,6 +135,7 @@ private fun launchAndAuthenticate(
 		}
 	}
 }
+
 @Preview(showBackground = true)
 @Composable
 private fun SplashScreenPreview() {

@@ -210,10 +210,12 @@ class SecurePasswordStorage private constructor(context: Context) {
 				is android.security.keystore.KeyPermanentlyInvalidatedException -> {
 					// This happens when the user changes their lock screen credentials
 					// We need to prompt them to reset their password
+					Log.d("SecurePasswordStorage", "Key Permanently Invalidated Exception: lock screen credentials changed at runtime")
 					null
 				}
 				is android.security.keystore.UserNotAuthenticatedException -> {
 					// Biometric not authenticated yet, we'll handle this in the next step
+					Log.d("SecurePasswordStorage", "Biometric not authenticated yet exception occurred")
 					null
 				}
 				else -> {
