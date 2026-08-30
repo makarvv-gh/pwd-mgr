@@ -51,20 +51,6 @@ class SecurePasswordStorage private constructor(context: Context) {
 		} catch (e: Exception) {
 			Log.e("SecurePasswordStorage", "Error checking keystore alias", e)
 		}
-
-		// First-use initialization
-		/*if (!isPasswordSet()) {
-			Log.d("SecurePasswordStorage", "First-use initialization: seeding Keystore with legacy master password")
-			//CoroutineScope(Dispatchers.IO).launch {
-			runBlocking {
-				val success = encryptAndStorePassword(LEGACY_MASTER_PASSWORD)
-				Log.d("SecurePasswordStorage", "Legacy password stored: $success")
-			}*/
-			// TODO: Remove after first-login flow is implemented
-		/*fun initializeWithPassword(password: String): Boolean {
-			return encryptAndStorePassword(password)
-		}*/
-
 	}
 	// Move initializeWithPassword outside of init block
 	// TODO: Remove after first-login flow is implemented
@@ -176,55 +162,68 @@ class SecurePasswordStorage private constructor(context: Context) {
 			return false
 		}
 	}
-	suspend fun decryptPassword(): String? = withContext(Dispatchers.IO) {
-	 //fun decryptPassword(): String? = withContext(Dispatchers.IO) {
-		try {
-			val encryptedPassword = sharedPreferences.getString(PASSWORD_KEY, null)
-			val iv = sharedPreferences.getString(IV_KEY, null)
+	//suspend fun decryptPassword(): String? = withContext(Dispatchers.IO) {
+	 fun decryptPassword(): String? = runBlocking {
+		withContext(Dispatchers.IO) {
+			try {
+				val encryptedPassword = sharedPreferences.getString(PASSWORD_KEY, null)
+				val iv = sharedPreferences.getString(IV_KEY, null)
 
-			if (encryptedPassword == null || iv == null) {
-				return@withContext null
-			}
+				if (encryptedPassword == null || iv == null) {
+					return@withContext null
+				}
 
-			val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-			/*val TEST_KEY_BYTES = "0123456789abcdef".toByteArray() // 16 bytes = AES-128
+				val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+				/*val TEST_KEY_BYTES = "0123456789abcdef".toByteArray() // 16 bytes = AES-128
 			val key = SecretKeySpec(TEST_KEY_BYTES, "AES")*/
-			val key = keyStore.getKey(KEY_ALIAS, null) as? SecretKey ?: return@withContext null
-			//logKeyInfo(key)
-			Log.d("SecurePasswordStorage", "Generated key class: ${key?.javaClass?.name}")
-			//match IV string to one created during encryption
-			val ivBytes = Base64.decode(iv, Base64.DEFAULT)
-			Log.d("SecurePasswordStorage", "Decryption IV: ${ivBytes.joinToString { "%02x".format(it) }}")
+				val key = keyStore.getKey(KEY_ALIAS, null) as? SecretKey ?: return@withContext null
+				//logKeyInfo(key)
+				Log.d("SecurePasswordStorage", "Generated key class: ${key?.javaClass?.name}")
+				//match IV string to one created during encryption
+				val ivBytes = Base64.decode(iv, Base64.DEFAULT)
+				Log.d(
+					"SecurePasswordStorage",
+					"Decryption IV: ${ivBytes.joinToString { "%02x".format(it) }}"
+				)
 
-			val ivSpec = GCMParameterSpec(128, Base64.decode(iv, Base64.DEFAULT))
+				val ivSpec = GCMParameterSpec(128, Base64.decode(iv, Base64.DEFAULT))
 
-			cipher.init(Cipher.DECRYPT_MODE, key, ivSpec)
+				cipher.init(Cipher.DECRYPT_MODE, key, ivSpec)
 
-			//val testEncrypt = cipher.doFinal("test".toByteArray())
-			//Log.d("SecurePasswordStorage", "Test encryption succeeded")
-			val decryptedBytes = cipher.doFinal(Base64.decode(encryptedPassword, Base64.DEFAULT))
+				//val testEncrypt = cipher.doFinal("test".toByteArray())
+				//Log.d("SecurePasswordStorage", "Test encryption succeeded")
+				val decryptedBytes =
+					cipher.doFinal(Base64.decode(encryptedPassword, Base64.DEFAULT))
 
-			String(decryptedBytes)
-		} catch (e: Exception) {
-			when (e) {
-				is android.security.keystore.KeyPermanentlyInvalidatedException -> {
-					// This happens when the user changes their lock screen credentials
-					// We need to prompt them to reset their password
-					Log.d("SecurePasswordStorage", "Key Permanently Invalidated Exception: lock screen credentials changed at runtime")
-					null
-				}
-				is android.security.keystore.UserNotAuthenticatedException -> {
-					// Biometric not authenticated yet, we'll handle this in the next step
-					Log.d("SecurePasswordStorage", "Biometric not authenticated yet exception occurred")
-					null
-				}
-				else -> {
-					e.printStackTrace()
-					null
+				String(decryptedBytes)
+			} catch (e: Exception) {
+				when (e) {
+					is android.security.keystore.KeyPermanentlyInvalidatedException -> {
+						// This happens when the user changes their lock screen credentials
+						// We need to prompt them to reset their password
+						Log.d(
+							"SecurePasswordStorage",
+							"Key Permanently Invalidated Exception: lock screen credentials changed at runtime"
+						)
+						null
+					}
+
+					is android.security.keystore.UserNotAuthenticatedException -> {
+						// Biometric not authenticated yet, we'll handle this in the next step
+						Log.d(
+							"SecurePasswordStorage",
+							"Biometric not authenticated yet exception occurred"
+						)
+						null
+					}
+
+					else -> {
+						e.printStackTrace()
+						null
+					}
 				}
 			}
-		}
-	}
+		}	}
 
 	fun isPasswordSet(): Boolean {
 		return sharedPreferences.contains(PASSWORD_KEY)

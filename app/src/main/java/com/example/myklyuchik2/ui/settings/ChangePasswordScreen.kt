@@ -46,12 +46,16 @@ import androidx.compose.material3.Button as BButton
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import android.content.Context
+import com.example.myklyuchik2.ui.main.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChangePasswordScreen(navController: NavController) {
+fun ChangePasswordScreen(
+	navController: NavController,
+	mainViewModel: MainViewModel
+) {
 	val context = LocalContext.current
-	val passwordRepository = remember { PasswordRepository.getInstance(context) }
+	val passwordRepository = remember { PasswordRepository.getInstance(context, mainViewModel) }
 	val focusManager = LocalFocusManager.current
 	val biometricManager = remember { BiometricAuthManager(context) }
 	val scope = rememberCoroutineScope()
@@ -226,6 +230,12 @@ fun ChangePasswordScreen(navController: NavController) {
 							scope.launch {
 								val success = passwordRepository.changePassword(oldPassword.text, newPassword.text)
 								if (success) {
+									// Get the current entries from MainViewModel
+									val currentEntries = mainViewModel.uiState.value.allEntries
+
+									// Re-encrypt with the new password using existing saveAndReload()
+									mainViewModel.saveAndReload(currentEntries)
+
 									showSuccess = true
 									error = ""
 								} else {

@@ -17,35 +17,33 @@ import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import java.io.File
 import android.util.Log
 import com.example.myklyuchik2.utils.AppInitializer
+import com.example.myklyuchik2.data.storage.DataState
 import androidx.compose.runtime.LaunchedEffect
 
-//class MainActivity : FragmentActivity() {
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+//class MainActivity : ComponentActivity() {
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 
-		val isFreshInstall = AppInitializer.isFirstUse(this)
-		val dataValid = AppInitializer.isDataValid(this)
+	// Determine the current data state
+	val dataState = AppInitializer.determineDataState(this)
 
 		var shouldShowFirstTimeSetup = false
 		var shouldShowError = false
 
-		when {
-			isFreshInstall -> {
-				shouldShowFirstTimeSetup = true
-			}
-
-			!dataValid -> {
-				// Data file missing or corrupt
-				AppInitializer.clearInstallMarker(this)
-				shouldShowError = true
-			}
-
-			else -> {
-				// Normal launch
-				shouldShowFirstTimeSetup = false
-			}
+	when (dataState) {
+		DataState.SpuriousData -> {
+			// Spurious data was already deleted, proceed as first time use
+			shouldShowFirstTimeSetup = true
 		}
+		DataState.FirstTimeUse -> {
+			shouldShowFirstTimeSetup = true
+		}
+		DataState.NormalUse -> {
+			// Normal launch, data is valid
+			shouldShowFirstTimeSetup = false
+		}
+	}
 
 		setContent {
 			MyKlyuchikTheme {

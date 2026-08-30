@@ -2,16 +2,21 @@ package com.example.myklyuchik2.ui.entry
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Base64
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.utils.Constants
 import com.example.myklyuchik2.ui.main.MainViewModel
 import com.example.myklyuchik2.ui.main.model.UiState
+import com.example.myklyuchik2.utils.AppInitializer
+import com.example.myklyuchik2.data.storage.DataState
+import com.example.myklyuchik2.data.encryption.CryptoService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.Date
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -190,60 +195,29 @@ class EntryViewModel(
 	}
 
 	// Сохранение записи
-	fun saveEntry() {
-		val state = _formState.value
-
-		// Валидация
-		if (!state.isValid()) {
-			_formState.update {
-				it.copy(
-					resourceNameError = if (it.resourceName.isBlank()) "Обязательное поле" else null,
-					loginError = if (it.login.isBlank()) "Обязательное поле" else null,
-					passwordError = if (it.password.isBlank()) "Обязательное поле" else null
-				)
-			}
-			return
-		}
-
+	fun saveEntry(entry: PasswordEntry, masterPassword: String) {
 		viewModelScope.launch {
-			_formState.update { it.copy(isLoading = true, error = null) }
-
 			try {
-				// 0. Get decrypted password from MainViewModel
-				val passwordResult = withContext(Dispatchers.IO) {
-					mainViewModel.getDecryptedPassword()
+				val context = mainViewModel.getContext() // ✅ From MainViewModel
+				val dataFile = File(context.filesDir, "passwords.enc")
+				val dataState = AppInitializer.determineDataState(context)
+
+				when (dataState) {
+					DataState.SpuriousData -> {
+						// Delete spurious file if it somehow reappeared
+						SecureStorage.deleteDataFile(dataFile.absolutePath)
+						// Proceed with creating new file
+						saveEntryWithNewDataFile(entry, masterPassword)
+					}
+					DataState.FirstTimeUse -> {
+						// Create new data file
+						saveEntryWithNewDataFile(entry, masterPassword)
+					}
+					DataState.NormalUse -> {
+						// Append to existing data file or update existing entry
+						appendEntryToExistingFile(entry, masterPassword)
+					}
 				}
-
-				if (passwordResult.isFailure) {
-					_formState.update { it.copy(isLoading = false, error = "Не удалось получить мастер-пароль: ${passwordResult.exceptionOrNull()?.message}") }
-					return@launch
-				}
-
-				val decryptedPassword = passwordResult.getOrNull()!!
-
-				// 1. Загружаем текущий список
-				val entries = SecureStorage.loadEncrypted(dataPath, decryptedPassword).toMutableList()
-
-				// 2. Создаём или обновляем запись
-				val newEntry = _formState.value.toPasswordEntry()
-				val existingIndex = entries.indexOfFirst { it.id == newEntry.id }
-
-				if (existingIndex >= 0) {
-					// Редактирование: сохраняем createdAt, обновляем updatedAt
-					entries[existingIndex] = newEntry.copy(
-						createdAt = entries[existingIndex].createdAt,
-						updatedAt = Date().toString()
-					)
-				} else {
-					// Создание: устанавливаем createdAt
-					entries.add(0, newEntry.copy(createdAt = Date().toString(), updatedAt = Date().toString()))
-				}
-
-				// 3. Сохраняем обратно
-				SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
-				mainViewModel.saveAndReload(entries)
-				_formState.update { it.copy(isLoading = false) }
-
 			} catch (e: Exception) {
 				_formState.update {
 					it.copy(
@@ -251,16 +225,109 @@ class EntryViewModel(
 						error = "Ошибка сохранения: ${e.message}"
 					)
 				}
-
 			}
 		}
 	}
 
+	private suspend fun appendEntryToExistingFile(entry: PasswordEntry, masterPassword: String) {
+		val context = mainViewModel.getContext()
+		val dataFile = File(context.filesDir, "passwords.enc")
+
+		try {
+			// Load existing entries
+			val existingEntries = SecureStorage.loadEncrypted(dataFile.absolutePath, masterPassword)
+
+			// Determine if we're in CREATE or EDIT mode
+			val isEditMode = entry.id.isNotBlank() && existingEntries.any { it.id == entry.id }
+
+			val updatedEntries = if (isEditMode) {
+				// Update existing entry: retain createdAt, update updatedAt
+				existingEntries.map {
+					if (it.id == entry.id) {
+						entry.copy(
+							createdAt = it.createdAt, // Retain original creation date
+							updatedAt = Date().toString()
+						)
+					} else {
+						it
+					}
+				}
+			} else {
+				// Create new entry: set both dates
+				existingEntries + entry.copy(
+					createdAt = Date().toString(),
+					updatedAt = Date().toString()
+				)
+			}
+
+			// Save updated entries
+			val salt = SecureStorage.readContainer(dataFile.absolutePath).salt
+			val decodedSalt = Base64.decode(salt, Base64.URL_SAFE or Base64.NO_WRAP)
+
+			SecureStorage.saveEncryptedWithSalt(
+				entries = updatedEntries,
+				masterPassword = masterPassword,
+				outputFile = dataFile.absolutePath,
+				salt = decodedSalt
+			)
+
+			mainViewModel.saveAndReload(updatedEntries)
+			_formState.update { it.copy(isLoading = false) }
+
+		} catch (e: Exception) {
+			_formState.update {
+				it.copy(
+					isLoading = false,
+					error = "Ошибка обновления данных: ${e.message}"
+				)
+			}
+		}
+	}
+	private suspend fun saveEntryWithNewDataFile(entry: PasswordEntry, masterPassword: String) {
+		val context = mainViewModel.getContext()
+		val dataFile = File(context.filesDir, "passwords.enc")
+
+		try {
+			// Generate new salt
+			val salt = CryptoService.generateSalt()
+
+			// Create new list with entry, set both dates
+			val updatedEntry = entry.copy(
+				id = entry.id.ifBlank { UUID.randomUUID().toString() },
+				createdAt = Date().toString(),
+				updatedAt = Date().toString()
+			)
+
+			// Save encrypted data
+			SecureStorage.saveEncryptedWithSalt(
+				entries = listOf(updatedEntry),
+				masterPassword = masterPassword,
+				outputFile = dataFile.absolutePath,
+				salt = salt
+			)
+
+			// Mark app as initialized
+			AppInitializer.markAppInitialized(context)
+
+			mainViewModel.saveAndReload(listOf(updatedEntry))
+			_formState.update { it.copy(isLoading = false) }
+
+		} catch (e: Exception) {
+			_formState.update {
+				it.copy(
+					isLoading = false,
+					error = "Ошибка создания файла: ${e.message}"
+				)
+			}
+		}
+	}
 	// Отмена без сохранения
 	fun discardChanges() {
 		_formState.update { it.copy(isLoading = false) }
 	}
-
+	fun updateFormState(update: (EntryFormState) -> EntryFormState) {
+		_formState.value = update(_formState.value)
+	}
 	// Factory для создания ViewModel с параметрами
 class Factory(
 	private val dataPath: String,

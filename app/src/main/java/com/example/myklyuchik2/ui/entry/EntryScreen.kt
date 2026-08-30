@@ -28,11 +28,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.ui.main.model.EntryMode
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.utils.Constants
 import com.example.myklyuchik2.ui.main.MainViewModel
 import java.io.File
+import kotlinx.coroutines.launch
 
 // ==================== Экран ====================
 //@OptIn(ExperimentalMaterial3Api::class)
@@ -58,13 +60,10 @@ fun EntryScreen(
 	val state by viewModel.formState.collectAsStateWithLifecycle()
 	val focusManager = LocalFocusManager.current
 	val scrollState = rememberScrollState()
+	val context = LocalContext.current
+	val dataFile = File(context.filesDir, "passwords.enc")
 
 	// Инициализация в режиме редактирования
-	/*LaunchedEffect(mode, entryId) {
-		if (mode == EntryMode.EDIT && entryId != null) {
-			viewModel.loadEntryForEdit(entryId)
-		}
-	}*/
 	LaunchedEffect(mode, entryId) {
 		if (mode == EntryMode.EDIT && entryId != null) {
 			viewModel.loadEntryForEdit(entryId) // ← теперь вызываем функцию из ViewModel
@@ -81,9 +80,19 @@ fun EntryScreen(
 					onDiscard()
 				},
 				onSave = {
-					viewModel.saveEntry()
-					focusManager.clearFocus()
-					onSaved() // Add this to navigate back after save
+					val dataPath = dataFile.absolutePath
+					viewModel.viewModelScope.launch {
+						mainViewModel.getDecryptedPassword().onSuccess { decryptedPassword ->
+							val entry = viewModel.formState.value.toPasswordEntry()
+							viewModel.saveEntry(entry, decryptedPassword)
+							focusManager.clearFocus()
+							onSaved()
+						}.onFailure { error ->
+							viewModel.updateFormState {
+								it.copy(error = "Не удалось получить мастер-пароль: ${error.message}")
+							}
+						}
+					}
 				},
 				isLoading = state.isLoading
 			)

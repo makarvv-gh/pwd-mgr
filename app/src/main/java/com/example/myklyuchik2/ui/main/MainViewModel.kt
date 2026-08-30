@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Date
 
+
 // ==================== ViewModel ====================
 class MainViewModel(
 	private val context: Context,
@@ -203,7 +204,7 @@ class MainViewModel(
 			Result.failure(e)
 		}
 	}
-
+	fun getContext(): Context = context
 	// Factory для создания ViewModel с параметрами
 	class Factory(
 		private val context: Context,
@@ -215,17 +216,3 @@ class MainViewModel(
 		}
 	}
 }
-/*class Factory(
-	private val context: Context,
-	private val assetManager: AssetManager
-) : ViewModelProvider.Factory {
-	@Suppress("UNCHECKED_CAST")
-	override fun <T : ViewModel> create(modelClass: Class<T>): T {
-		if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-			return MainViewModel(context, assetManager) as T
-		}
-		throw IllegalArgumentException("Unknown ViewModel class")
-	}
-}
-*/
-//added 2026-06-15 as a fxi to refresh problem - is a duplicate

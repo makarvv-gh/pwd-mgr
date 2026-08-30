@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,6 +41,8 @@ import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.ui.main.model.UiEvent
 import com.example.myklyuchik2.ui.main.model.UiState
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
+import com.example.myklyuchik2.utils.AppInitializer
+import com.example.myklyuchik2.data.storage.DataState
 import androidx.navigation.NavController
 import com.example.myklyuchik2.ui.navigation.Screen
 import com.example.myklyuchik2.utils.Constants
@@ -52,6 +55,41 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Date
 
+@Composable
+private fun renderEmptyState(
+	dataState: DataState,
+	modifier: Modifier = Modifier
+) {
+	when (dataState) {
+		DataState.SpuriousData -> {
+			EmptyStateView(
+				hasFilters = false,
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(32.dp)
+			)
+		}
+		DataState.FirstTimeUse -> {
+			EmptyStateView(
+				hasFilters = false,
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(32.dp)
+			)
+		}
+		DataState.NormalUse -> {
+			Text(
+				text = "Нет доступных записей",
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(16.dp),
+				style = MaterialTheme.typography.bodyMedium,
+				color = MaterialTheme.colorScheme.onSurfaceVariant,
+				textAlign = TextAlign.Center
+			)
+		}
+	}
+}
 // ==================== MainScreen ====================
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -72,6 +110,34 @@ fun MainScreen(
 	val state by viewModel.uiState.collectAsStateWithLifecycle()
 	val scope = rememberCoroutineScope()
 	val snackbarHostState = remember { SnackbarHostState() }
+	val context = LocalContext.current
+	val filesDir = context.filesDir
+	val dataFile = File(filesDir, "passwords.enc")
+
+	// Check data state when UI starts
+	val dataState by remember {
+		mutableStateOf(AppInitializer.determineDataState(context))
+	}
+
+	// Handle special cases based on data state
+	LaunchedEffect(Unit) {
+		when (dataState) {
+			DataState.SpuriousData -> {
+				// Spurious data was already deleted, nothing to do
+			}
+			DataState.FirstTimeUse -> {
+				// First time use, show empty state
+			}
+			DataState.NormalUse -> {
+				// Normal use, validate data file
+				if (!SecureStorage.hasValidData(dataFile.absolutePath)) {
+					// Data file is invalid, reset state
+					AppInitializer.clearInstallMarker(context)
+					SecureStorage.deleteDataFile(dataFile.absolutePath)
+				}
+			}
+		}
+	}
 
 	// Обработка событий из ViewModel
 	LaunchedEffect(Unit) {
@@ -154,7 +220,9 @@ fun MainScreen(
 					CircularProgressIndicator()
 				}
 			}
-
+			val context = LocalContext.current
+			val filesDir = context.filesDir
+			val dataFile = File(filesDir, "passwords.enc")
 			// Список записей
 			LazyColumn(
 				contentPadding = PaddingValues(16.dp),
@@ -187,10 +255,11 @@ fun MainScreen(
 						}
 					)
 				}
-				if (!state.isLoading && state.filteredEntries.isEmpty()) {
-				//if (state.filteredEntries.isEmpty() && !state.isLoading) {
-					item {
-						EmptyStateView(hasFilters = state.filters.searchQuery.isNotBlank() || state.filters.tagFilters.isNotEmpty())
+				// Handle empty file or file with invalid structure
+				item {
+					if (state.filteredEntries.isEmpty() && !state.isLoading) {
+						val currentDataState = AppInitializer.determineDataState(context)
+						renderEmptyState(currentDataState)
 					}
 				}
 			}
@@ -207,14 +276,6 @@ fun MainScreen(
 				onClearAll = viewModel::clearFilters
 			)
 		}
-
-		// Диалог настроек (заглушка)
-		/*if (state.showSettingsDialog) {
-			/*SettingsDialog(
-				onDismiss = { viewModel.toggleSettingsDialog(false) }
-			)*/
-			navController.navigate("settings")
-		}*/
 	}
 }
 
@@ -340,9 +401,9 @@ fun PasswordListItem(
 
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(color)
-                    .padding(16.dp),
+	                .fillMaxSize()
+	                .background(color)
+	                .padding(16.dp),
                 contentAlignment = when (direction) {
                     SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
                     SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
@@ -361,8 +422,8 @@ fun PasswordListItem(
         content = {
             Card(
                 modifier = modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onEdit),
+	                .fillMaxWidth()
+	                .clickable(onClick = onEdit),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface

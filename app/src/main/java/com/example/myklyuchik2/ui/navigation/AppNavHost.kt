@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
@@ -39,7 +40,13 @@ fun AppNavHost(
 	isFirstUse: Boolean = false
 ) {
 	val startDestination = if (isFirstUse) "first_time" else "splash"
-
+// ✅ Declare it first
+	val mainViewModel: MainViewModel = viewModel(
+		factory = MainViewModel.Factory(
+			context = LocalContext.current.applicationContext,
+			assetManager = LocalContext.current.assets
+		)
+	)
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,
@@ -100,7 +107,10 @@ fun AppNavHost(
 		}
 
 		composable("change-password") {
-			ChangePasswordScreen(navController = navController)
+			ChangePasswordScreen(
+				navController = navController,
+				mainViewModel = mainViewModel
+			)
 		}
 
 		// В AppNavHost.kt, в комментах к Screen.Entry:
@@ -115,13 +125,13 @@ fun AppNavHost(
 			val mode = EntryMode.valueOf(
 				backStackEntry.arguments?.getString("mode") ?: EntryMode.CREATE.name
 			)
-			// ✅ Declare it first
+			/*/ ✅ Declare it first
 			val mainViewModel: MainViewModel = viewModel(
 				factory = MainViewModel.Factory(
 					context = LocalContext.current.applicationContext,
 					assetManager = LocalContext.current.assets
 				)
-			)
+			)*/
 			EntryScreen(
 				mode = mode,
 				entryId = if (entryId == "new") null else entryId,

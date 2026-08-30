@@ -10,6 +10,7 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.text.Charsets
+import android.util.Log
 
 object CryptoService {
 
@@ -42,12 +43,34 @@ object CryptoService {
 			ITERATIONS,
 			KEY_LENGTH_BYTES * 8
 		)
+		// Add a fixed salt for HMAC key derivation to ensure consistency - 26-08-22
+		val hmacSpec = PBEKeySpec(
+			password.toCharArray(),
+			"HMAC_KEY_SALT_0123456789".toByteArray(), // Fixed salt for HMAC key
+			ITERATIONS,
+			256 // 256 bits = 32 bytes for HMAC key
+		)
+
 		val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-		return factory.generateSecret(spec).encoded
+
+		//26-08-22
+		//return factory.generateSecret(spec).encoded
+		// Derive main key
+		val mainKey = factory.generateSecret(spec).encoded
+
+		// Derive HMAC key separately
+		val hmacKey = factory.generateSecret(hmacSpec).encoded
+
+		// Combine them using a deterministic method
+		val combinedKey = ByteArray(KEY_LENGTH_BYTES)
+		for (i in mainKey.indices) {
+			combinedKey[i] = (mainKey[i].toInt() and 0xFF).xor(hmacKey[i % hmacKey.size].toInt() and 0xFF).toByte()
+		}
+		return combinedKey
 	}
 
-	fun encrypt(data: String, password: String): EncryptedContainer {
-		val salt = generateSalt()
+	fun  encryptWithSalt(data: String, password: String, salt: ByteArray): EncryptedContainer {
+		//val salt = generateSalt() - use the same salt
 		val fullKey = deriveKeyBytes(password, salt)
 
 		// Split key: first 16 bytes for encryption, last 16 for signing
@@ -59,9 +82,15 @@ object CryptoService {
 		SecureRandom().nextBytes(iv)
 
 		// Encrypt with AES-128-CBC
+		/*val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+		cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(encryptKey, "AES"), IvParameterSpec(iv))
+		val cipherText = cipher.doFinal(data.toByteArray(Charsets.UTF_8))*/
+
+		// new: Encrypt with AES-CBC
 		val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
 		cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(encryptKey, "AES"), IvParameterSpec(iv))
 		val cipherText = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
+
 
 		// Build token payload: version(1) + timestamp(8) + IV(16) + ciphertext
 		val timestamp = System.currentTimeMillis() / 1000L
@@ -114,6 +143,7 @@ object CryptoService {
 
 		// Extract IV and ciphertext
 		val iv = token.copyOfRange(9, 9 + IV_SIZE_BYTES)
+		Log.d("CryptoService", "Extracted IV: ${iv.joinToString(":") { "%02x".format(it) }}")
 		val cipherTextEnd = token.size - HMAC_SIZE_BYTES
 		val cipherText = token.copyOfRange(9 + IV_SIZE_BYTES, cipherTextEnd)
 		val receivedHmac = token.copyOfRange(cipherTextEnd, token.size)
@@ -130,15 +160,31 @@ object CryptoService {
 		val computedHmac = mac.doFinal(payloadForHmac)
 
 		// Constant-time comparison to prevent timing attacks
-		if (!MessageDigest.isEqual(receivedHmac, computedHmac)) {
+		/*if (!MessageDigest.isEqual(receivedHmac, computedHmac)) {
+			throw SecurityException("HMAC verification failed: wrong password or corrupted data")
+		}*/
+		// replace MessageDigest.isEqual with our own implementation
+		if (!verifyHmac(receivedHmac, computedHmac)) {
 			throw SecurityException("HMAC verification failed: wrong password or corrupted data")
 		}
-
 		// Decrypt
 		val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
 		cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(encryptKey, "AES"), IvParameterSpec(iv))
 		val plainBytes = cipher.doFinal(cipherText)
 
 		return String(plainBytes, Charsets.UTF_8)
+	}
+	// Add this helper method to ensure consistent HMAC computation
+	fun verifyHmac(receivedHmac: ByteArray, computedHmac: ByteArray): Boolean {
+		if (receivedHmac.size != computedHmac.size) return false
+		var result = 0
+		for (i in receivedHmac.indices) {
+			// Use our xor extension function for constant-time comparison
+			result = result or (receivedHmac[i].xor(computedHmac[i]))
+		}
+		return result == 0
+	}
+	private fun Byte.xor(other: Byte): Int {
+		return (this.toInt() and 0xFF) xor (other.toInt() and 0xFF)
 	}
 }
