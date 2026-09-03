@@ -4,17 +4,19 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-
 import androidx.compose.foundation.text.KeyboardOptions
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.*
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -26,6 +28,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -423,12 +426,19 @@ fun PasswordListItem(
             Card(
                 modifier = modifier
 	                .fillMaxWidth()
-	                .clickable(onClick = onEdit),
+	                .clickable(onClick = onEdit)
+	                .border( // Apply border directly via Modifier
+		                width = 1.dp,
+	                    color = MaterialTheme.colorScheme.outline,
+	                    shape = MaterialTheme.shapes.small
+	        ),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+	            //border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline), // Add a thin border
+	            //shape = MaterialTheme.shapes.small // Apply rounded corners
             ) {
 	            Column(
 		            modifier = Modifier.padding(16.dp),

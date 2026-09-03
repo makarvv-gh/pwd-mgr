@@ -33,6 +33,7 @@ import com.example.myklyuchik2.ui.main.model.EntryMode
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.utils.Constants
 import com.example.myklyuchik2.ui.main.MainViewModel
+import com.example.myklyuchik2.ui.entry.EntryViewModel
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -62,12 +63,18 @@ fun EntryScreen(
 	val scrollState = rememberScrollState()
 	val context = LocalContext.current
 	val dataFile = File(context.filesDir, "passwords.enc")
-
+	val showErrorDialog by viewModel.showErrorDialog.collectAsStateWithLifecycle()
 	// Инициализация в режиме редактирования
 	LaunchedEffect(mode, entryId) {
 		if (mode == EntryMode.EDIT && entryId != null) {
 			viewModel.loadEntryForEdit(entryId) // ← теперь вызываем функцию из ViewModel
 		}
+	}
+	if (showErrorDialog) {
+		ErrorDialog(
+			message = state.error ?: "Неизвестная ошибка",
+			onDismiss = { viewModel.dismissError() }
+		)
 	}
 
 	Scaffold(
@@ -86,7 +93,13 @@ fun EntryScreen(
 							val entry = viewModel.formState.value.toPasswordEntry()
 							viewModel.saveEntry(entry, decryptedPassword)
 							focusManager.clearFocus()
-							onSaved()
+							//if (state.error == null) {
+							if (state.isValid()) {
+								onSaved()
+							}else {
+								// ✅ Show dialog instead of navigating
+								viewModel.showErrorDialog()
+							}
 						}.onFailure { error ->
 							viewModel.updateFormState {
 								it.copy(error = "Не удалось получить мастер-пароль: ${error.message}")
@@ -106,7 +119,7 @@ fun EntryScreen(
                 .padding(16.dp),
 			verticalArrangement = Arrangement.spacedBy(12.dp)
 		) {
-//===Ресурс (обязательно) ===
+			//===Ресурс (обязательно) ===
 			OutlinedTextField(
 				value = state.resourceName,
 				onValueChange = viewModel::updateResourceName,
@@ -384,6 +397,19 @@ private fun EntryTopAppBar(
 		modifier = modifier
 	)
 }
+ @Composable
+ private fun ErrorDialog(message: String, onDismiss: () -> Unit) {
+	 AlertDialog(
+		 onDismissRequest = onDismiss,
+		 title = { Text("Ошибка") },
+		 text = { Text(message) },
+		 confirmButton = {
+			 Button(onClick = onDismiss) {
+				 Text("OK")
+			 }
+		 }
+	 )
+ }
 
 //==================== Режимы экрана ====================
 //enum class EntryMode { CREATE, EDIT }

@@ -19,11 +19,28 @@ import android.util.Log
 import com.example.myklyuchik2.utils.AppInitializer
 import com.example.myklyuchik2.data.storage.DataState
 import androidx.compose.runtime.LaunchedEffect
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 
 class MainActivity : FragmentActivity() {
-//class MainActivity : ComponentActivity() {
+	private var backPressCount = 0
+
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
+		// Handle back press using the correct OnBackPressedDispatcher API
+		val callback = object : OnBackPressedCallback(true) {
+			override fun handleOnBackPressed() {
+				if (backPressCount == 1) {
+					finishAffinity() // Close the app
+					backPressCount = 0
+				} else {
+					backPressCount++
+					Toast.makeText(this@MainActivity, "Повторно нажмите Esc для выхода", Toast.LENGTH_SHORT).show()
+				}
+			}
+		}
+
+		onBackPressedDispatcher.addCallback(this, callback)
 
 	// Determine the current data state
 	val dataState = AppInitializer.determineDataState(this)

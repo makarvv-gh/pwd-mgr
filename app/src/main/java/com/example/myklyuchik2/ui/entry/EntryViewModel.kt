@@ -2,6 +2,7 @@ package com.example.myklyuchik2.ui.entry
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.mutableStateOf
 import android.util.Base64
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.SecureStorage
@@ -42,7 +43,9 @@ data class EntryFormState(
 	val resourceNameError: String? = null,
 	val loginError: String? = null,
 	val passwordError: String? = null
+
 ) {
+
 	fun isValid(): Boolean = resourceName.isNotBlank() && login.isNotBlank() && password.isNotBlank()
 
 	fun toPasswordEntry(): PasswordEntry = PasswordEntry(
@@ -75,8 +78,20 @@ class EntryViewModel(
 ) : ViewModel() {
 
 	private val _formState = MutableStateFlow(EntryFormState())
-	val formState: StateFlow<EntryFormState> = _formState.asStateFlow()
+	//val formState: StateFlow<EntryFormState> = _formState.asStateFlow()
+	val formState: StateFlow<EntryFormState> get() = _formState.asStateFlow()
+	private val _showErrorDialog = MutableStateFlow(false)
 
+	val showErrorDialog: StateFlow<Boolean> get() = _showErrorDialog
+	//val showErrorDialog: StateFlow<Boolean> get() = _showErrorDialog.asStateFlow()
+
+	fun dismissError() {
+		_showErrorDialog.value = false
+		updateFormState { it.copy(error = null) }
+	}
+	fun showErrorDialog() {
+		_showErrorDialog.value = true
+	}
 	// Инициализация в режиме редактирования
 	fun initEdit(entry: PasswordEntry) {
 		_formState.update {
@@ -130,7 +145,8 @@ class EntryViewModel(
 		_formState.update {
 			it.copy(
 				resourceName = value,
-				resourceNameError = if (value.isBlank() && it.resourceName.isNotBlank()) "Обязательное поле" else null
+				//resourceNameError = if (value.isBlank() && it.resourceName.isNotBlank()) "Обязательное поле" else null
+				//resourceNameError = if (value.isBlank()) "Обязательное поле" else null
 			)
 		}
 	}
@@ -139,7 +155,8 @@ class EntryViewModel(
 		_formState.update {
 			it.copy(
 				login = value,
-				loginError = if (value.isBlank() && it.login.isNotBlank()) "Обязательное поле" else null
+				//loginError = if (value.isBlank() && it.login.isNotBlank()) "Обязательное поле" else null
+				//loginError = if (value.isBlank()) "Обязательное поле" else null
 			)
 		}
 	}
@@ -148,7 +165,8 @@ class EntryViewModel(
 		_formState.update {
 			it.copy(
 				password = value,
-				passwordError = if (value.isBlank() && it.password.isNotBlank()) "Обязательное поле" else null
+				//passwordError = if (value.isBlank() && it.password.isNotBlank()) "Обязательное поле" else null
+				//passwordError = if (value.isBlank()) "Обязательное поле" else null
 			)
 		}
 	}
@@ -198,6 +216,27 @@ class EntryViewModel(
 	fun saveEntry(entry: PasswordEntry, masterPassword: String) {
 		viewModelScope.launch {
 			try {
+				// Валидация обязательных полей
+				val state = _formState.value
+
+				// Проверка обязательных полей
+				if (!state.isValid()) {
+					val resourceNameError = if (state.resourceName.isBlank()) "Ресурс" else null
+					val loginError = if (state.login.isBlank()) "Логин" else null
+					val passwordError = if (state.password.isBlank()) "Пароль" else null
+
+					val missingFields = listOfNotNull(resourceNameError, loginError, passwordError)
+					_formState.update {
+						it.copy(
+							resourceNameError = if (it.resourceName.isBlank()) "Обязательное поле" else null,
+							loginError = if (it.login.isBlank()) "Обязательное поле" else null,
+							passwordError = if (it.password.isBlank()) "Обязательное поле" else null,
+							error = "Следующие обязательные поля не заполнены: ${missingFields.joinToString()}",
+							isLoading = false
+						)
+					}
+					return@launch
+				}
 				val context = mainViewModel.getContext() // ✅ From MainViewModel
 				val dataFile = File(context.filesDir, "passwords.enc")
 				val dataState = AppInitializer.determineDataState(context)
