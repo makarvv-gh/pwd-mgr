@@ -1,32 +1,35 @@
 package com.example.myklyuchik2.ui.settings
 
-import android.util.Log
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.*
+import android.content.Intent
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.*
-import androidx.navigation.NavController
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.input.key.Key
-import android.view.KeyEvent
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material3.Badge
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.myklyuchik2.ui.main.model.EntryMode
-import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
-import java.io.File
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.example.myklyuchik2.ui.csvimport.CsvImportActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,11 +39,12 @@ fun SettingsScreen(
 	//onNavigateBack = { navController.popBackStack()},
 		// Alternatively, you could use:
 		// navController.navigateUp()
-	onImportCsv: () -> Unit,
+	onImportCsv: (String) -> Unit,  // Updated to take a file path parameter,
 	onExportCsv: () -> Unit,
 	onChangePassword: () -> Unit = { navController.navigate("change-password") },
 	onCloudClick: () -> Unit // пока заглушка
 ) {
+	val context = LocalContext.current
 	Scaffold(
 		topBar = {
 			TopAppBar(
@@ -65,7 +69,11 @@ fun SettingsScreen(
 				SettingsListItem(
 					title = "Импорт из CSV",
 					icon = Icons.Default.Upload,
-					onClick = onImportCsv
+					onClick = {
+						// Start CSV import activity
+						val intent = Intent(context, CsvImportActivity::class.java)
+						(context as? ComponentActivity)?.startActivityForResult(intent, 1001)
+					}
 				)
 			}
 			item {
