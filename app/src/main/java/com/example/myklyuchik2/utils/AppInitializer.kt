@@ -2,6 +2,7 @@
 package com.example.myklyuchik2.utils
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.data.storage.DataState
@@ -25,27 +26,32 @@ object AppInitializer {
 			// Spurious data file: data file exists but marker is missing
 			dataFile.exists() && !markerFile.exists() -> {
 				// Delete the spurious data file
+				Log.d("AppInitializer", "Spurious data file: data file exists but marker is missing")
 				SecureStorage.deleteDataFile(dataFile.absolutePath)
 				DataState.SpuriousData
 			}
 			// First-time use: neither file exists
 			!dataFile.exists() && !markerFile.exists() -> {
+				Log.d("AppInitializer", "First-time use: neither file exists")
 				DataState.FirstTimeUse
 			}
 			// Normal use: both files exist
 			else -> {
+				Log.d("AppInitializer", "Normal use: both files exist")
 				// Verify data file validity
 				if (SecureStorage.hasValidData(dataFile.absolutePath)) {
 					DataState.NormalUse
 				} else {
 					// Data file is invalid but marker exists
 					// Delete both files and return FirstTimeUse
+					Log.d("AppInitializer", "Normal use: Data file is invalid but marker exists")
 					if (markerFile.exists()) {
 						markerFile.delete()
 					}
 					if (dataFile.exists()) {
 						SecureStorage.deleteDataFile(dataFile.absolutePath)
 					}
+					Log.d("AppInitializer", "Delete both files and return FirstTimeUse")
 					DataState.FirstTimeUse
 				}
 			}

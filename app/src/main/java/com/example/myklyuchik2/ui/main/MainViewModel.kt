@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Date
+import android.util.Log
 
 
 // ==================== ViewModel ====================
@@ -122,11 +123,14 @@ class MainViewModel(
 		val storage = SecurePasswordStorage.getInstance(context)
 		val decryptedPassword = storage.decryptPassword() ?: return
 		SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
-		_uiState.update {
-			it.copy(
-				allEntries = entries,
-				filteredEntries = applyFilters(entries, it.filters)
-			)
+		viewModelScope.launch {
+			Log.d("MainViewModel", "Saving and reloading with ${entries.size} entries")
+			_uiState.update {
+				it.copy(
+					allEntries = entries,
+					filteredEntries = applyFilters(entries, it.filters)
+				)
+			}
 		}
 	}
 

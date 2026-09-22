@@ -3,8 +3,12 @@ package com.example.myklyuchik2.ui.csvimport
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
+import android.content.Intent
+import android.util.Log
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myklyuchik2.data.encryption.CryptoService
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.repository.PasswordRepository
@@ -26,36 +30,43 @@ class CsvImportViewModel : ViewModel() {
 		this.passwordRepository = passwordRepository
 	}
 
-	fun selectCsvFile() {
-		// This will be implemented in the activity using Intent
+	fun resetImportState() {
+		_importResult.value = CsvImportResult.Success(emptyList())
 	}
-
 	fun processCsvFile(uri: Uri, context: Context) {
 		viewModelScope.launch {
 			try {
 				val inputStream = context.contentResolver.openInputStream(uri)
-				val reader = inputStream?.bufferedReader()
+					?: run {
+						_importResult.value = CsvImportResult.Error("Не удалось открыть файл")
+						return@launch
+					}
 
-				if (reader == null) {
-					_importResult.value = CsvImportResult.Error("Не удалось открыть файл")
-					return@launch // ✅ Correct early return in coroutine scope
-				}
-
-				val lines = reader.readLines()
-				if (lines.isEmpty()) {
+				val rawBytes = inputStream.readBytes()
+				if (rawBytes.isEmpty()) {
 					_importResult.value = CsvImportResult.Error("Файл пуст")
-					return@launch // ✅ Correct early return in coroutine scope
+					return@launch
 				}
+
+				val decodedText = String(rawBytes, charset("windows-1251"))
+				val lines = decodedText.split("\r\n", "\n", "\r").map { it.trim() }
+
+				if (lines.size <= 1) {
+					_importResult.value = CsvImportResult.Error("Файл содержит только заголовок или отсутствуют данные")
+					return@launch
+				}
+
+				Log.d("CsvImportViewModel", "First line: ${lines.first()}")
+				Log.d("CsvImportViewModel", "Decoded text sample: ${decodedText.take(200)}")
 
 				val header = lines.first().split(",").map { it.trim().lowercase() }
 				val indexOfResource = header.indexOf("resource_name")
 				val indexOfLogin = header.indexOf("login")
 				val indexOfPassword = header.indexOf("password")
 
-				// Basic validation
 				if (indexOfResource == -1 || indexOfLogin == -1 || indexOfPassword == -1) {
 					_importResult.value = CsvImportResult.Error("Неверный формат CSV файла")
-					return@launch // ✅ Correct early return in coroutine scope
+					return@launch
 				}
 
 				val entries = mutableListOf<PasswordEntry>()
@@ -85,6 +96,10 @@ class CsvImportViewModel : ViewModel() {
 						)
 					)
 				}
+				if (entries.isEmpty()) {
+					_importResult.value = CsvImportResult.Error("Файл не содержит данных")
+					return@launch
+				}
 
 				// Append imported entries to existing entries
 				val currentEntries = mainViewModel.uiState.value.allEntries
@@ -98,11 +113,19 @@ class CsvImportViewModel : ViewModel() {
 					// Get the data path
 					val dataPath = File(context.filesDir, "passwords.enc").absolutePath
 
-					// Get the container to access the existing salt
+					// Get the container to access the existing salt (or generate new if missing)
 					val container = SecureStorage.readContainer(dataPath)
-					val salt = Base64.decode(container.salt, Base64.URL_SAFE or Base64.NO_WRAP)
+					val salt = if (container.salt.isNullOrEmpty()) {
+						// No existing data file — generate a new random salt
+						CryptoService.generateSalt()
+					} else {
+						// Use existing salt
+						Base64.decode(container.salt, Base64.URL_SAFE or Base64.NO_WRAP)
+					}
 
-					// Re-encrypt with the same salt but new password
+					// Re-encrypt with the salt (existing or new)
+					Log.d("CsvImportViewModel", "Using salt: ${salt.joinToString(":") { "%02x".format(it) }}")
+
 					SecureStorage.saveEncryptedWithSalt(newEntries, decryptedPassword, dataPath, salt)
 
 					// Update the UI
@@ -113,6 +136,7 @@ class CsvImportViewModel : ViewModel() {
 					_importResult.value = CsvImportResult.Error("Ошибка сохранения данных: ${e.message}")
 				}
 			} catch (e: Exception) {
+				Log.d("ProcessCsvFile", "ERROR Processing file: $uri")
 				_importResult.value = CsvImportResult.Error("Ошибка чтения файла: ${e.message}")
 			}
 		}
