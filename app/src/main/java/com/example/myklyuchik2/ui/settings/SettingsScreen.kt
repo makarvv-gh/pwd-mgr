@@ -34,107 +34,100 @@ import com.example.myklyuchik2.ui.csvimport.CsvImportActivity
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-	navController: NavController,
-	onNavigateBack: () -> Unit = { navController.popBackStack() },
-	//onNavigateBack = { navController.popBackStack()},
-		// Alternatively, you could use:
-		// navController.navigateUp()
-	onImportCsv: (String) -> Unit,  // Updated to take a file path parameter,
-	onExportCsv: () -> Unit,
-	onChangePassword: () -> Unit = { navController.navigate("change-password") },
-	onCloudClick: () -> Unit // пока заглушка
+    navController: NavController,
+    onNavigateBack: () -> Unit = { navController.popBackStack() },
+    onImportCsv: () -> Unit,
+    onExportCsv: () -> Unit,
+    onChangePassword: () -> Unit = { navController.navigate("change-password") },
+    onCloudClick: () -> Unit
 ) {
-	val context = LocalContext.current
-	Scaffold(
-		topBar = {
-			TopAppBar(
-				title = { Text("Настройки") },
-				navigationIcon = {
-					IconButton(onClick = onNavigateBack) {
-						Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
-					}
-				}
-			)
-		}
+    val context = LocalContext.current
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Настройки") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    }
+                }
+            )
+        }
 
-	) { padding ->
-		LazyColumn(
-			modifier = Modifier
-				.fillMaxSize()
-				.padding(padding)
-				.padding(horizontal = 16.dp)
-		) {
-			item { SectionTitle("Данные") }
-			item {
-				SettingsListItem(
-					title = "Импорт из CSV",
-					icon = Icons.Default.Upload,
-					onClick = {
-						// Start CSV import activity
-						val intent = Intent(context, CsvImportActivity::class.java)
-						(context as? ComponentActivity)?.startActivityForResult(intent, 1001)
-					}
-				)
-			}
-			item {
-				SettingsListItem(
-					title = "Экспорт в CSV",
-					icon = Icons.Default.Download,
-					onClick = onExportCsv,
-					enabled = false, // заглушка
-					trailing = { Badge { Text("Coming Soon") } }
-				)
-			}
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+        ) {
+            item { SectionTitle("Данные") }
+            item {
+                SettingsListItem(
+                    title = "Импорт из CSV",
+                    icon = Icons.Default.Upload,
+                    onClick = onImportCsv
+                )
+            }
+            item {
+                SettingsListItem(
+                    title = "Экспорт в CSV",
+                    icon = Icons.Default.Download,
+                    onClick = onExportCsv,
+                    enabled = false,
+                    trailing = { Badge { Text("Coming Soon") } }
+                )
+            }
 
-			item { SectionTitle("Безопасность") }
-			item {
-				SettingsListItem(
-					title = "Смена мастер-пароля",
-					icon = Icons.Default.Lock,
-					onClick = onChangePassword,
-					enabled = true, // Now enabled
-					trailing = null
-				)
-			}
+            item { SectionTitle("Безопасность") }
+            item {
+                SettingsListItem(
+                    title = "Смена мастер-пароля",
+                    icon = Icons.Default.Lock,
+                    onClick = onChangePassword,
+                    enabled = true,
+                    trailing = null
+                )
+            }
 
-			item { SectionTitle("Синхронизация") }
-			item {
-				SettingsListItem(
-					title = "Облачный диск",
-					icon = Icons.Default.Cloud,
-					onClick = onCloudClick,
-					enabled = false, // заглушка
-					trailing = { Badge { Text("Coming Soon") } }
-				)
-			}
-		}
-	}
+            item { SectionTitle("Синхронизация") }
+            item {
+                SettingsListItem(
+                    title = "Облачный диск",
+                    icon = Icons.Default.Cloud,
+                    onClick = onCloudClick,
+                    enabled = false,
+                    trailing = { Badge { Text("Coming Soon") } }
+                )
+            }
+        }
+    }
 }
 
 @Composable
 private fun SettingsListItem(
-	title: String,
-	icon: ImageVector,
-	onClick: () -> Unit,
-	enabled: Boolean = true,
-	trailing: @Composable (() -> Unit)? = null
+    title: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    trailing: @Composable (() -> Unit)? = null
 ) {
-	ListItem(
-		headlineContent = { Text(title) },
-		leadingContent = { Icon(icon, contentDescription = null) },
-		trailingContent = trailing ?: { Icon(Icons.Default.ChevronRight, null) },
-		modifier = Modifier
-			.clickable(enabled = enabled, onClick = onClick)
-			.then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
-	)
+    ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = trailing ?: { Icon(Icons.Default.ChevronRight, null) },
+        modifier = Modifier
+            .clickable(enabled = enabled, onClick = onClick)
+            .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
+    )
 }
 
 @Composable
 private fun SectionTitle(text: String) {
-	Text(
-		text = text,
-		style = MaterialTheme.typography.titleSmall,
-		color = MaterialTheme.colorScheme.primary,
-		modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp)
-	)
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp)
+    )
 }
