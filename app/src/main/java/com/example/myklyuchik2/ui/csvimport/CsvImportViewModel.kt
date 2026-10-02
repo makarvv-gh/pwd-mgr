@@ -3,10 +3,9 @@ package com.example.myklyuchik2.ui.csvimport
 import android.content.Context
 import android.net.Uri
 import android.util.Base64
-import android.content.Intent
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.data.encryption.CryptoService
 import com.example.myklyuchik2.data.storage.SecureStorage
@@ -14,131 +13,162 @@ import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.repository.PasswordRepository
 import com.example.myklyuchik2.ui.main.MainViewModel
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
+sealed class CsvImportResult {
+/** Import is running (or waiting for the user to pick a file). */
+object InProgress : CsvImportResult()
+/** The user dismissed the file picker without choosing a file. */
+object Cancelled : CsvImportResult()
+data class Success(val entries: List<PasswordEntry>) : CsvImportResult()
+data class Error(val message: String) : CsvImportResult()
+}
+
+/**
+ * Parses a CSV picked via SAF, re-encrypts and persists all entries, and — crucially —
+ * updates the SAME MainViewModel instance that MainActivity's screens observe.
+ *
+ * Sharing happens through [sharedMainViewModel], installed by MainActivity when its
+ * MainViewModel is created. Previously CsvImportActivity built a second, private
+ * MainViewModel; the import updated that orphan copy, so the visible UI stayed stale
+ * until a process restart forced a reload from disk.
+ */
 class CsvImportViewModel : ViewModel() {
-	private val _importResult = MutableStateFlow<CsvImportResult>(CsvImportResult.Success(emptyList()))
-	val importResult: StateFlow<CsvImportResult> = _importResult
 
-	private lateinit var mainViewModel: MainViewModel
-	private lateinit var passwordRepository: PasswordRepository
+companion object {
+@Volatile
+private var sharedMainViewModel: MainViewModel? = null
 
-	fun setDependencies(mainViewModel: MainViewModel, passwordRepository: PasswordRepository) {
-		this.mainViewModel = mainViewModel
-		this.passwordRepository = passwordRepository
-	}
+/** Called by MainActivity right after it creates its MainViewModel. */
+fun attachSharedMainViewModel(vm: MainViewModel) {
+sharedMainViewModel = vm
+}
+}
 
-	fun resetImportState() {
-		_importResult.value = CsvImportResult.Success(emptyList())
-	}
-	fun processCsvFile(uri: Uri, context: Context) {
-		viewModelScope.launch {
-			try {
-				val inputStream = context.contentResolver.openInputStream(uri)
-					?: run {
-						_importResult.value = CsvImportResult.Error("Не удалось открыть файл")
-						return@launch
-					}
+private val _importResult = MutableStateFlow<CsvImportResult>(CsvImportResult.InProgress)
+val importResult: StateFlow<CsvImportResult> = _importResult
 
-				val rawBytes = inputStream.readBytes()
-				if (rawBytes.isEmpty()) {
-					_importResult.value = CsvImportResult.Error("Файл пуст")
-					return@launch
-				}
+fun resetImportState() {
+_importResult.value = CsvImportResult.InProgress
+}
 
-				val decodedText = String(rawBytes, charset("windows-1251"))
-				val lines = decodedText.split("\r\n", "\n", "\r").map { it.trim() }
+fun markCancelled() {
+_importResult.value = CsvImportResult.Cancelled
+}
 
-				if (lines.size <= 1) {
-					_importResult.value = CsvImportResult.Error("Файл содержит только заголовок или отсутствуют данные")
-					return@launch
-				}
+fun processCsvFile(uri: Uri, context: Context) {
+viewModelScope.launch {
+try {
+val mainViewModel = sharedMainViewModel ?: run {
+_importResult.value = CsvImportResult.Error(
+"Основной экран недоступен: импортированные данные появятся после перезапуска приложения"
+)
+return@launch
+}
 
-				Log.d("CsvImportViewModel", "First line: ${lines.first()}")
-				Log.d("CsvImportViewModel", "Decoded text sample: ${decodedText.take(200)}")
+val passwordRepository = PasswordRepository.getInstance(context, mainViewModel)
 
-				val header = lines.first().split(",").map { it.trim().lowercase() }
-				val indexOfResource = header.indexOf("resource_name")
-				val indexOfLogin = header.indexOf("login")
-				val indexOfPassword = header.indexOf("password")
+val inputStream = withContext(Dispatchers.IO) {
+context.contentResolver.openInputStream(uri)
+} ?: run {
+_importResult.value = CsvImportResult.Error("Не удалось открыть файл")
+return@launch
+}
 
-				if (indexOfResource == -1 || indexOfLogin == -1 || indexOfPassword == -1) {
-					_importResult.value = CsvImportResult.Error("Неверный формат CSV файла")
-					return@launch
-				}
+val rawBytes = withContext(Dispatchers.IO) { inputStream.use { it.readBytes() } }
+if (rawBytes.isEmpty()) {
+_importResult.value = CsvImportResult.Error("Файл пуст")
+return@launch
+}
 
-				val entries = mutableListOf<PasswordEntry>()
-				for (i in 1 until lines.size) {
-					val line = lines[i]
-					val columns = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-						.map { it.trim().removeSurrounding("\"") }
+val decodedText = String(rawBytes, charset("windows-1251"))
+val lines = decodedText.split("\r\n", "\n", "\r").map { it.trim() }
 
-					fun get(idx: Int) = if (idx in columns.indices) columns[idx] else ""
+if (lines.size <= 1) {
+_importResult.value = CsvImportResult.Error("Файл содержит только заголовок или отсутствуют данные")
+return@launch
+}
 
-					val resourceName = get(indexOfResource)
-					if (resourceName.isBlank()) continue
+Log.d("CsvImportViewModel", "First line: ${lines.first()}")
 
-					val tagsStr = get(header.indexOf("tags"))
-					val tags = if (tagsStr.isNotBlank()) tagsStr.split(";").map { it.trim() } else emptyList()
+val header = lines.first().split(",").map { it.trim().lowercase() }
+val indexOfResource = header.indexOf("resource_name")
+val indexOfLogin = header.indexOf("login")
+val indexOfPassword = header.indexOf("password")
 
-					entries.add(
-						PasswordEntry(
-							resourceName = resourceName,
-							login = get(indexOfLogin),
-							password = get(indexOfPassword),
-							url = get(header.indexOf("url")),
-							email = get(header.indexOf("email")),
-							authCode = get(header.indexOf("auth_code")),
-							notes = get(header.indexOf("notes")),
-							tags = tags
-						)
-					)
-				}
-				if (entries.isEmpty()) {
-					_importResult.value = CsvImportResult.Error("Файл не содержит данных")
-					return@launch
-				}
+if (indexOfResource == -1 || indexOfLogin == -1 || indexOfPassword == -1) {
+_importResult.value = CsvImportResult.Error("Неверный формат CSV файла")
+return@launch
+}
 
-				// Append imported entries to existing entries
-				val currentEntries = mainViewModel.uiState.value.allEntries
-				val newEntries = currentEntries + entries
+val entries = mutableListOf<PasswordEntry>()
+for (i in 1 until lines.size) {
+val line = lines[i]
+val columns = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+.map { it.trim().removeSurrounding("\"") }
 
-				// Save updated entries with re-encryption
-				try {
-					// Get the current password
-					val decryptedPassword = passwordRepository.getCurrentPassword() ?: throw Exception("Не удалось получить мастер-пароль")
+fun get(idx: Int) = if (idx in columns.indices) columns[idx] else ""
 
-					// Get the data path
-					val dataPath = File(context.filesDir, "passwords.enc").absolutePath
+val resourceName = get(indexOfResource)
+if (resourceName.isBlank()) continue
 
-					// Get the container to access the existing salt (or generate new if missing)
-					val container = SecureStorage.readContainer(dataPath)
-					val salt = if (container.salt.isNullOrEmpty()) {
-						// No existing data file — generate a new random salt
-						CryptoService.generateSalt()
-					} else {
-						// Use existing salt
-						Base64.decode(container.salt, Base64.URL_SAFE or Base64.NO_WRAP)
-					}
+val tagsStr = get(header.indexOf("tags"))
+val tags = if (tagsStr.isNotBlank()) tagsStr.split(";").map { it.trim() } else emptyList()
 
-					// Re-encrypt with the salt (existing or new)
-					Log.d("CsvImportViewModel", "Using salt: ${salt.joinToString(":") { "%02x".format(it) }}")
+entries.add(
+PasswordEntry(
+resourceName = resourceName,
+login = get(indexOfLogin),
+password = get(indexOfPassword),
+url = get(header.indexOf("url")),
+email = get(header.indexOf("email")),
+authCode = get(header.indexOf("auth_code")),
+notes = get(header.indexOf("notes")),
+tags = tags
+)
+)
+}
+if (entries.isEmpty()) {
+_importResult.value = CsvImportResult.Error("Файл не содержит данных")
+return@launch
+}
 
-					SecureStorage.saveEncryptedWithSalt(newEntries, decryptedPassword, dataPath, salt)
+// Append imported entries to existing entries
+val currentEntries = mainViewModel.uiState.value.allEntries
+val newEntries = currentEntries + entries
 
-					// Update the UI
-					mainViewModel.saveAndReload(newEntries)
+try {
+val decryptedPassword = passwordRepository.getCurrentPassword()
+?: throw Exception("Не удалось получить мастер-пароль")
 
-					_importResult.value = CsvImportResult.Success(entries)
-				} catch (e: Exception) {
-					_importResult.value = CsvImportResult.Error("Ошибка сохранения данных: ${e.message}")
-				}
-			} catch (e: Exception) {
-				Log.d("ProcessCsvFile", "ERROR Processing file: $uri")
-				_importResult.value = CsvImportResult.Error("Ошибка чтения файла: ${e.message}")
-			}
-		}
-	}
+val dataPath = File(context.filesDir, "passwords.enc").absolutePath
+
+val container = SecureStorage.readContainer(dataPath)
+val salt = if (container.salt.isNullOrEmpty()) {
+CryptoService.generateSalt()
+} else {
+Base64.decode(container.salt, Base64.URL_SAFE or Base64.NO_WRAP)
+}
+
+withContext(Dispatchers.IO) {
+SecureStorage.saveEncryptedWithSalt(newEntries, decryptedPassword, dataPath, salt)
+}
+
+// Update the SHARED MainViewModel so the visible UI refreshes immediately.
+mainViewModel.saveAndReload(newEntries)
+
+_importResult.value = CsvImportResult.Success(entries)
+} catch (e: Exception) {
+_importResult.value = CsvImportResult.Error("Ошибка сохранения данных: ${e.message}")
+}
+} catch (e: Exception) {
+Log.e("CsvImportViewModel", "ERROR processing file: $uri", e)
+_importResult.value = CsvImportResult.Error("Ошибка чтения файла: ${e.message}")
+}
+}
+}
 }
