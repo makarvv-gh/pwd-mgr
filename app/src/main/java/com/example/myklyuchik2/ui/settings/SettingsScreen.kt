@@ -70,9 +70,10 @@ fun SettingsScreen(
 					title = "Импорт из CSV",
 					icon = Icons.Default.Upload,
 					onClick = {
-						// Start CSV import activity
+						// CsvImportActivity launches the system file picker itself,
+						// processes the picked CSV, and finishes when done.
 						val intent = Intent(context, CsvImportActivity::class.java)
-						(context as? ComponentActivity)?.startActivityForResult(intent, 1001)
+						context.startActivity(intent)
 					}
 				)
 			}
