@@ -3,6 +3,7 @@ package com.example.myklyuchik2.ui.csvimport
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.ViewModelProvider
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 
 /**
@@ -39,90 +41,81 @@ import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
  */
 class CsvImportActivity : ComponentActivity() {
 
-    // Activity-scoped ViewModel property. This is a normal Kotlin property (not
-    // composable code), so we must use the Activity's own ViewModelStoreOwner
-    // API — the viewModel<T>() *delegate* here resolves to the deprecated
-    // androidx.activity ext that only works inside @Composable functions,
-    // which caused "Composable invocations can only happen from the context
-    // of a @Composable function".
-    private val csvImportViewModel: CsvImportViewModel by lazy {
-        ViewModelProvider(this)[CsvImportViewModel::class.java]
-    }
+	// Activity-scoped ViewModel, shared with the Composables of this Activity.
+	private val csvImportViewModel: CsvImportViewModel by lazy {
+		ViewModelProvider(this)[CsvImportViewModel::class.java]
+	}
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+	override fun onCreate(savedInstanceState: Bundle?) {
+		super.onCreate(savedInstanceState)
 
-        setContent {
-            MyKlyuchikTheme {
-                CsvImportLauncher(
-                    viewModel = csvImportViewModel,
-                    onFinished = { finish() }
-                )
-            }
-        }
-    }
+		setContent {
+			MyKlyuchikTheme {
+				CsvImportLauncher(
+					viewModel = csvImportViewModel,
+					onFinished = { finish() }
+				)
+			}
+		}
+	}
 }
 
 @Composable
 fun CsvImportLauncher(
-viewModel: CsvImportViewModel,
-onFinished: () -> Unit
+	viewModel: CsvImportViewModel,
+	onFinished: () -> Unit
 ) {
 	val context = LocalContext.current
 	var isPickerLaunched by remember { mutableStateOf(false) }
 
-val launcher = rememberLauncherForActivityResult(
-contract = ActivityResultContracts.OpenDocument()
-) { uri: Uri? ->
-if (uri != null) {
-Log.d("CsvImportLauncher", "File picked: $uri")
-try {
+	val launcher = rememberLauncherForActivityResult(
+		contract = ActivityResultContracts.OpenDocument()
+	) { uri: Uri? ->
+		if (uri != null) {
+			Log.d("CsvImportLauncher", "File picked: $uri")
+			try {
 // Persist read access so the URI stays readable beyond this callback.
-// NOTE: use context.contentResolver here — the `launcher` variable is
-// not yet initialized inside its own result callback, which caused
-// "Unresolved reference 'launcher'".
-context.contentResolver.takePersistableUriPermission(
-uri,
-Intent.FLAG_GRANT_READ_URI_PERMISSION
-)
-} catch (e: SecurityException) {
+				context.contentResolver.takePersistableUriPermission(
+					uri,
+					Intent.FLAG_GRANT_READ_URI_PERMISSION)
+			} catch (e: SecurityException) {
 // Some providers don't grant persistable permissions; the one-time
 // grant is still enough to read the file while this Activity is alive.
-Log.w("CsvImportLauncher", "Persistable permission not available", e)
-}
-viewModel.processCsvFile(uri, context)
-} else {
-Log.d("CsvImportLauncher", "No file selected")
+				Log.w("CsvImportLauncher", "Persistable permission not available", e)
+			}
+			viewModel.processCsvFile(uri, context)
+		} else {
+			Log.d("CsvImportLauncher", "No file selected")
 // User cancelled the picker: end immediately instead of spinning forever.
-viewModel.markCancelled()
-onFinished()
-}
-}
+			viewModel.markCancelled()
+			onFinished()
+		}
+	}
 
-if (!isPickerLaunched) {
-LaunchedEffect(Unit) {
-isPickerLaunched = true
-launcher.launch(arrayOf("text/comma-separated-values", "text/csv", "text/plain"))
-}
-}
+	if (!isPickerLaunched) {
+		LaunchedEffect(Unit) {
+			isPickerLaunched = true
+			launcher.launch(arrayOf("text/comma-separated-values", "text/csv", "text/plain"))
+		}
+	}
 
 // Collect the result StateFlow correctly. The previous code read
 // viewModel.importResult.value inside derivedStateOf(...) keyed on the flow
 // object itself — the flow reference never changes, so the snapshot was
 // computed once and NEVER recomputed when a new result was emitted.
 // That left isProcessingComplete permanently false => infinite spinner.
-val importResult by viewModel.importResult.collectAsStateWithLifecycle()
+	val importResult by viewModel.importResult.collectAsStateWithLifecycle()
 
 // As soon as the import reaches a terminal state, close this Activity and
 // return to the Settings screen. Persistence and updating the SHARED
 // MainViewModel state happen inside processCsvFile().
-if (importResult !is CsvImportResult.InProgress) {
-LaunchedEffect(importResult) {
-onFinished()
-}
-}
+	if (importResult !is CsvImportResult.InProgress) {
+		LaunchedEffect(importResult) {
+			onFinished()
+		}
+	}
 
-Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-CircularProgressIndicator()
-}
+	Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+		CircularProgressIndicator()
+	}
 }
