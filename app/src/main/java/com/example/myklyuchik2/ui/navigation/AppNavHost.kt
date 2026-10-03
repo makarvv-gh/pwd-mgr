@@ -16,6 +16,7 @@ import com.example.myklyuchik2.ui.main.MainScreen
 import com.example.myklyuchik2.ui.splash.SplashScreen
 import com.example.myklyuchik2.ui.settings.SettingsScreen
 import com.example.myklyuchik2.ui.main.MainViewModel
+import com.example.myklyuchik2.ui.csvimport.CsvImportViewModel
 import com.example.myklyuchik2.ui.settings.ChangePasswordScreen
 import com.example.myklyuchik2.ui.splash.FirstTimeSetupScreen
 import com.example.myklyuchik2.utils.Constants
@@ -41,12 +42,15 @@ fun AppNavHost(
 ) {
 	val startDestination = if (isFirstUse) "first_time" else "splash"
 // ✅ Declare it first
-	val mainViewModel: MainViewModel = viewModel(
-		factory = MainViewModel.Factory(
-			context = LocalContext.current.applicationContext,
-			assetManager = LocalContext.current.assets
-		)
+	val context = LocalContext.current.applicationContext
+
+	val mainViewModel: MainViewModel = MainViewModel.getInstance(
+		context = context,
+		assetManager = context.assets
 	)
+	// Publish this MainActivity-owned instance so CsvImportActivity (a different
+	// ViewModelStoreOwner) can update the SAME state the UI observes after an import.
+	CsvImportViewModel.attachSharedMainViewModel(mainViewModel)
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,

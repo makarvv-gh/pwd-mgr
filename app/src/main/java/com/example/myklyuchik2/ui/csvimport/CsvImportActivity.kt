@@ -1,24 +1,16 @@
 package com.example.myklyuchik2.ui.csvimport
 
 import android.os.Bundle
-import android.content.Intent
-import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.net.Uri
+import android.util.Log
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,110 +19,110 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.LifecycleOwner
-import com.example.myklyuchik2.data.model.PasswordEntry
-import com.example.myklyuchik2.data.repository.PasswordRepository
-import com.example.myklyuchik2.ui.main.MainViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
-import kotlinx.coroutines.delay
 
-sealed class CsvImportResult {
-	data class Success(val entries: List<PasswordEntry>) : CsvImportResult()
-	data class Error(val message: String) : CsvImportResult()
-}
+/**
+ * Transparent "picker host" activity.
+ *
+ * Its only jobs are:
+ *  1. Launch the system document picker and hand the picked URI to [CsvImportViewModel].
+ *  2. Finish as soon as processing reaches a terminal state (success, error, or
+ *     cancellation), returning the user to the Settings screen they came from.
+ *
+ * IMPORTANT: this Activity must NOT create its own MainViewModel instance.
+ * A MainViewModel created here lives in CsvImportActivity's ViewModelStore;
+ * MainActivity's screens observe the MainViewModel owned by MainActivity.
+ * Updating the wrong copy leaves the file saved but the visible UI stale
+ * (exactly the "entries appear only after relaunch" symptom).
+ */
 class CsvImportActivity : ComponentActivity() {
-	private val csvImportViewModel: CsvImportViewModel by lazy {
-		CsvImportViewModel()
-	}
 
-	override fun onCreate(savedInstanceState: Bundle?) {
-		super.onCreate(savedInstanceState)
+    // Activity-scoped ViewModel property. This is a normal Kotlin property (not
+    // composable code), so we must use the Activity's own ViewModelStoreOwner
+    // API — the viewModel<T>() *delegate* here resolves to the deprecated
+    // androidx.activity ext that only works inside @Composable functions,
+    // which caused "Composable invocations can only happen from the context
+    // of a @Composable function".
+    private val csvImportViewModel: CsvImportViewModel by lazy {
+        ViewModelProvider(this)[CsvImportViewModel::class.java]
+    }
 
-		setContent {
-			MyKlyuchikTheme {
-				val mainViewModel = viewModel<MainViewModel>(
-					factory = MainViewModel.Factory(
-						context = this,
-						assetManager = assets
-					)
-				)
-				val passwordRepository = PasswordRepository.getInstance(this, mainViewModel)
-				csvImportViewModel.setDependencies(mainViewModel, passwordRepository)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-				Surface(modifier = Modifier.fillMaxSize()) {
-					CsvImportLauncher(
-						viewModel = csvImportViewModel,
-						onImportComplete = { finish() }
-					)
-				}
-			}
-		}
-	}
+        setContent {
+            MyKlyuchikTheme {
+                CsvImportLauncher(
+                    viewModel = csvImportViewModel,
+                    onFinished = { finish() }
+                )
+            }
+        }
+    }
 }
 
 @Composable
 fun CsvImportLauncher(
-	viewModel: CsvImportViewModel,
-	onImportComplete: () -> Unit
+viewModel: CsvImportViewModel,
+onFinished: () -> Unit
 ) {
 	val context = LocalContext.current
-
-	val launcher = rememberLauncherForActivityResult(
-		contract = ActivityResultContracts.OpenDocument()
-	) { uri ->
-		if (uri != null) {
-			Log.d("CsvImportLauncher", "File picked: $uri")
-			context.contentResolver.takePersistableUriPermission(
-				uri,
-				Intent.FLAG_GRANT_READ_URI_PERMISSION
-			)
-			viewModel.processCsvFile(uri, context)
-		} else {
-			Log.d("CsvImportLauncher", "No file selected")
-			onImportComplete()
-		}
-	}
-
 	var isPickerLaunched by remember { mutableStateOf(false) }
 
-	if (!isPickerLaunched) {
-		LaunchedEffect(Unit) {
-			isPickerLaunched = true
-			viewModel.resetImportState()
-			launcher.launch(arrayOf("text/comma-separated-values", "text/csv"))
-		}
-	}
-
-	Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-		CircularProgressIndicator()
-	}
-
-	// Observe result only after file is processed
-	//val isProcessingComplete by remember {
-	val isProcessingComplete by remember(viewModel.importResult) {
-		derivedStateOf {
-			when (val result = viewModel.importResult.value) {
-				is CsvImportResult.Success -> result.entries.isNotEmpty()
-				is CsvImportResult.Error -> true
-				else -> false
-			}
-		}
-	}
-
-	if (isProcessingComplete) {
-		LaunchedEffect(Unit) {
-			delay(100) // Small delay to ensure data is ready
-			onImportComplete()
-			/*viewModel.importResult.collect { result ->
-				when (result) {
-					is CsvImportResult.Success -> onImportComplete()
-					is CsvImportResult.Error -> onImportComplete()
-				}
-			}*/
-		}
-	}
+val launcher = rememberLauncherForActivityResult(
+contract = ActivityResultContracts.OpenDocument()
+) { uri: Uri? ->
+if (uri != null) {
+Log.d("CsvImportLauncher", "File picked: $uri")
+try {
+// Persist read access so the URI stays readable beyond this callback.
+// NOTE: use context.contentResolver here — the `launcher` variable is
+// not yet initialized inside its own result callback, which caused
+// "Unresolved reference 'launcher'".
+context.contentResolver.takePersistableUriPermission(
+uri,
+Intent.FLAG_GRANT_READ_URI_PERMISSION
+)
+} catch (e: SecurityException) {
+// Some providers don't grant persistable permissions; the one-time
+// grant is still enough to read the file while this Activity is alive.
+Log.w("CsvImportLauncher", "Persistable permission not available", e)
+}
+viewModel.processCsvFile(uri, context)
+} else {
+Log.d("CsvImportLauncher", "No file selected")
+// User cancelled the picker: end immediately instead of spinning forever.
+viewModel.markCancelled()
+onFinished()
+}
 }
 
+if (!isPickerLaunched) {
+LaunchedEffect(Unit) {
+isPickerLaunched = true
+launcher.launch(arrayOf("text/comma-separated-values", "text/csv", "text/plain"))
+}
+}
+
+// Collect the result StateFlow correctly. The previous code read
+// viewModel.importResult.value inside derivedStateOf(...) keyed on the flow
+// object itself — the flow reference never changes, so the snapshot was
+// computed once and NEVER recomputed when a new result was emitted.
+// That left isProcessingComplete permanently false => infinite spinner.
+val importResult by viewModel.importResult.collectAsStateWithLifecycle()
+
+// As soon as the import reaches a terminal state, close this Activity and
+// return to the Settings screen. Persistence and updating the SHARED
+// MainViewModel state happen inside processCsvFile().
+if (importResult !is CsvImportResult.InProgress) {
+LaunchedEffect(importResult) {
+onFinished()
+}
+}
+
+Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+CircularProgressIndicator()
+}
+}
