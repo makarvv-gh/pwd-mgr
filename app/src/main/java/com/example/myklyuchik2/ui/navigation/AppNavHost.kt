@@ -44,11 +44,9 @@ fun AppNavHost(
 // ✅ Declare it first
 	val context = LocalContext.current.applicationContext
 
-	val mainViewModel: MainViewModel = viewModel(
-		factory = MainViewModel.Factory(
-			context = context,
-			assetManager = context.assets
-		)
+	val mainViewModel: MainViewModel = MainViewModel.getInstance(
+		context = context,
+		assetManager = context.assets
 	)
 	// Publish this MainActivity-owned instance so CsvImportActivity (a different
 	// ViewModelStoreOwner) can update the SAME state the UI observes after an import.

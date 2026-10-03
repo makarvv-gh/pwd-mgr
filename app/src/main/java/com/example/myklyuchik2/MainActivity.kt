@@ -26,7 +26,6 @@ import androidx.activity.OnBackPressedCallback
 
 class MainActivity : FragmentActivity() {
 	private var backPressCount = 0
-	private val csvImportViewModel = CsvImportViewModel()
 
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
@@ -96,14 +95,6 @@ class MainActivity : FragmentActivity() {
 
 		if (shouldShowFirstTimeSetup) {
 			AppInitializer.markAppInitialized(this)
-		}
-	}
-	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-		super.onActivityResult(requestCode, resultCode, data)
-		if (requestCode == 1001 && resultCode == RESULT_OK) {
-			data?.data?.let { uri ->
-				csvImportViewModel.processCsvFile(uri, this)
-			}
 		}
 	}
 }

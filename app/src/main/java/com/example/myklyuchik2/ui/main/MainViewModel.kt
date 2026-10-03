@@ -13,22 +13,46 @@ import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.ui.main.model.UiEvent
 import com.example.myklyuchik2.ui.main.model.UiState
 import com.example.myklyuchik2.utils.Constants
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Date
 import android.util.Log
 
 
 // ==================== ViewModel ====================
-class MainViewModel(
+class MainViewModel private constructor(
 	private val context: Context,
 	private val assetManager: AssetManager
 ) : ViewModel() {
+
+	companion object {
+		/**
+		 * Single shared instance. MainActivity's AppNavHost and MainScreen used to
+		 * create SEPARATE MainViewModel instances (each viewModel() call without a
+		 * key created its own entry in the Activity's ViewModelStore). The import
+		 * updated one copy while the visible screen observed another — exactly the
+		 * "entries appear only after relaunch" symptom. A process-wide singleton
+		 * guarantees every screen observes the same state.
+		 */
+		@Volatile
+		private var instance: MainViewModel? = null
+
+		fun getInstance(context: Context, assetManager: AssetManager): MainViewModel {
+			return instance ?: synchronized(this) {
+				instance ?: MainViewModel(
+					context.applicationContext,
+					assetManager
+				).also { instance = it }
+			}
+		}
+	}
 
 	private val _uiState = MutableStateFlow(UiState())
 	val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -81,6 +105,7 @@ class MainViewModel(
 				val storage = SecurePasswordStorage.getInstance(context)
 				val decryptedPassword = storage.decryptPassword() ?: return@launch
 				SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
+				// Reload from disk so state is refreshed after the save.
 				loadEntries()
 				_events.send(UiEvent.ShowSuccess("Импортировано ${entries.size} записей"))
 			} catch (e: Exception) {
@@ -94,7 +119,7 @@ class MainViewModel(
 		viewModelScope.launch {
 			val current = _uiState.value.allEntries.toMutableList()
 			current.add(0, entry)
-			saveAndReload(current)
+			saveAndPersist(current)
 			_events.send(UiEvent.NavigateBack)
 		}
 	}
@@ -105,7 +130,7 @@ class MainViewModel(
 			val idx = current.indexOfFirst { it.id == updated.id }
 			if (idx >= 0) {
 				current[idx] = updated.copy(updatedAt = Date().toString())
-				saveAndReload(current)
+				saveAndPersist(current)
 			}
 			_events.send(UiEvent.NavigateBack)
 		}
@@ -115,23 +140,45 @@ class MainViewModel(
 		viewModelScope.launch {
 			val current = _uiState.value.allEntries.toMutableList()
 			val removed = current.removeIf { it.id == entry.id }
-			if (removed) saveAndReload(current)
+			if (removed) saveAndPersist(current)
 		}
 	}
 
-	suspend fun saveAndReload(entries: List<PasswordEntry>) {
+	/**
+	 * Persists [entries] to the encrypted store AND publishes them into [uiState].
+	 * Used by all in-app mutations (add/update/delete).
+	 */
+	private suspend fun saveAndPersist(entries: List<PasswordEntry>) {
 		val storage = SecurePasswordStorage.getInstance(context)
 		val decryptedPassword = storage.decryptPassword() ?: return
-		SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
+		withContext(Dispatchers.IO) {
+			SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
+		}
+		publishEntries(entries)
+	}
+
+	/**
+	 * State-only refresh of [uiState]. The CSV import path persists the file
+	 * itself (SecureStorage.saveEncryptedWithSalt, preserving the container salt),
+	 * then calls this — previously saveAndReload also re-wrote the file with a
+	 * different scheme, clobbering the freshly imported data.
+	 */
+	suspend fun saveAndReload(entries: List<PasswordEntry>) {
+		publishEntries(entries)
+	}
+
+	private suspend fun publishEntries(entries: List<PasswordEntry>) {
 		viewModelScope.launch {
-			Log.d("MainViewModel", "Saving and reloading with ${entries.size} entries")
+			Log.d("MainViewModel", "Publishing ${entries.size} entries to UI state")
 			_uiState.update {
 				it.copy(
+					isLoading = false,
 					allEntries = entries,
 					filteredEntries = applyFilters(entries, it.filters)
 				)
 			}
-		}
+		}.join() // Ensure the state is published before returning so callers
+		// (e.g. CSV import finishing its Activity) don't race the recomposition.
 	}
 
 	fun updateSearchQuery(query: String) {
@@ -216,7 +263,9 @@ class MainViewModel(
 	) : ViewModelProvider.Factory {
 		@Suppress("UNCHECKED_CAST")
 		override fun <T : ViewModel> create(modelClass: Class<T>): T {
-			return MainViewModel(context, assetManager) as T
+			// Always hand out the process-wide singleton so every screen and the
+			// CSV import path observe/mutate the SAME state.
+			return MainViewModel.getInstance(context, assetManager) as T
 		}
 	}
 }

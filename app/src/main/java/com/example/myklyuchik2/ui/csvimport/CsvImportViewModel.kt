@@ -10,7 +10,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.data.encryption.CryptoService
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.data.model.PasswordEntry
-import com.example.myklyuchik2.data.repository.PasswordRepository
 import com.example.myklyuchik2.ui.main.MainViewModel
 import java.io.File
 import kotlinx.coroutines.Dispatchers

@@ -98,11 +98,9 @@ private fun renderEmptyState(
 @Composable
 fun MainScreen(
 	navController: NavController,
-	viewModel: MainViewModel = viewModel(
-		factory = MainViewModel.Factory(
-			context = LocalContext.current.applicationContext,
-			assetManager = LocalContext.current.assets
-		)
+	viewModel: MainViewModel = MainViewModel.getInstance(
+		context = LocalContext.current.applicationContext,
+		assetManager = LocalContext.current.assets
 	),
 	onAddEntry: () -> Unit,
 	onEditEntry: (PasswordEntry) -> Unit,
