@@ -123,8 +123,9 @@ fun MainScreen(
 		mutableStateOf(AppInitializer.determineDataState(context))
 	}
 
-	// Handle special cases based on data state
-	LaunchedEffect(Unit) {
+	// Handle special cases based on data state. Keyed on the entry count so it
+	// re-runs when returning here after a CSV import or a first-use save.
+	LaunchedEffect(dataState, state.allEntries.size) {
 		when (dataState) {
 			DataState.SpuriousData -> {
 				// Spurious data was already deleted, nothing to do
@@ -138,6 +139,9 @@ fun MainScreen(
 					// Data file is invalid, reset state
 					AppInitializer.clearInstallMarker(context)
 					SecureStorage.deleteDataFile(dataFile.absolutePath)
+				} else {
+					// Load/refresh entries from disk whenever MainScreen appears.
+					viewModel.loadEntries()
 				}
 			}
 		}

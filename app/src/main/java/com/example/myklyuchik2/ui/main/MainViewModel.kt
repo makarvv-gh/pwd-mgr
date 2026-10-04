@@ -69,27 +69,36 @@ class MainViewModel private constructor(
 	}
 
 	init {
-		loadEntries()
+		// NOTE: loadEntries() is deliberately NOT called here. The singleton is
+		// created eagerly by AppNavHost before the master password has been
+		// entered/verified; loading at construction time set isLoading = true
+		// and then bailed out early (decryptPassword() returns null before
+		// authentication / on first use), leaving the spinner running forever.
+		// Loading is triggered explicitly from MainScreen when it becomes visible.
 	}
 
-	private fun loadEntries() {
+	fun loadEntries() {
 		viewModelScope.launch {
 			_uiState.update { it.copy(isLoading = true) }
 			try {
+				val dataFile = File(dataPath)
+				if (!dataFile.exists()) {
+					// First-time use (or app reset): nothing to load yet — show
+					// the empty state instead of an infinite spinner.
+					publishEntries(emptyList())
+					return@launch
+				}
+
 				val storage = SecurePasswordStorage.getInstance(context)
 				val decryptedPassword = storage.decryptPassword() ?: run {
-					_uiState.update { it.copy(error = "Не удалось расшифровать данные") }
+					// Master password not available (not yet verified). Clear the
+					// flag so the UI can render the empty state rather than spin.
+					_uiState.update { it.copy(isLoading = false) }
 					return@launch
 				}
 
 				val entries = SecureStorage.loadEncrypted(dataPath, decryptedPassword)
-				_uiState.update {
-					it.copy(
-						isLoading = false,
-						allEntries = entries,
-						filteredEntries = applyFilters(entries, it.filters)
-					)
-				}
+				publishEntries(entries)
 			} catch (e: Exception) {
 				_uiState.update { it.copy(isLoading = false, error = e.message) }
 				_events.send(UiEvent.ShowError("Ошибка загрузки: ${e.message}"))
