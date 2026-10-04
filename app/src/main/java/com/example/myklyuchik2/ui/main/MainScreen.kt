@@ -115,8 +115,11 @@ fun MainScreen(
 	val filesDir = context.filesDir
 	val dataFile = File(filesDir, "passwords.enc")
 
-	// Check data state when UI starts
-	val dataState by remember {
+	// Check data state when UI starts/reloads. Re-evaluated whenever the
+	// entry list changes (e.g. right after a CSV import returned to this
+	// screen) so that MainScreen reflects the CURRENT marker/data file
+	// situation instead of the stale value captured at first composition.
+	val dataState by remember(state.allEntries.size) {
 		mutableStateOf(AppInitializer.determineDataState(context))
 	}
 
