@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myklyuchik2.R
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.data.storage.SecurePasswordStorage
+import com.example.myklyuchik2.utils.AppInitializer
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 
