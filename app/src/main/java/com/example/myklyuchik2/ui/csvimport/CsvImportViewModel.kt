@@ -8,9 +8,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.data.encryption.CryptoService
+import com.example.myklyuchik2.data.storage.DataState
 import com.example.myklyuchik2.data.storage.SecureStorage
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.ui.main.MainViewModel
+import com.example.myklyuchik2.utils.AppInitializer
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -134,32 +136,72 @@ _importResult.value = CsvImportResult.Error("Файл не содержит да
 return@launch
 }
 
-// Append imported entries to existing entries
+// ==================== State-aware persistence ====================
+// Mirror the logic used when saving a new entry (EntryViewModel): before writing
+// the data file we must check the app's DataState. If the app has never been
+// initialized (FirstTimeUse - no marker file), the freshly written data file
+// would be treated as 'spurious' by AppInitializer.determineDataState() on the
+// next launch and silently deleted. So in that case we must create the data
+// file with the imported entries AND create the install marker file.
+try {
+val appContext = mainViewModel.getContext()
+val dataPath = File(appContext.filesDir, "passwords.enc").absolutePath
+val dataState = AppInitializer.determineDataState(appContext)
+
+when (dataState) {
+DataState.FirstTimeUse -> {
+// App not yet initialized - initialize it now:
+// create the data file from scratch (new salt), then the marker file.
+val decryptedPassword = mainViewModel.getDecryptedPassword().getOrThrow()
+val salt = CryptoService.generateSalt()
+withContext(Dispatchers.IO) {
+SecureStorage.saveEncryptedWithSalt(entries, decryptedPassword, dataPath, salt)
+}
+AppInitializer.markAppInitialized(appContext)
+mainViewModel.saveAndReload(entries)
+}
+
+DataState.NormalUse -> {
+if (!SecureStorage.hasValidData(dataPath)) {
+// Very unlikely, but just in case the data file became corrupted:
+// delete both data and marker files so the app resets to FirstTimeUse.
+AppInitializer.clearInstallMarker(appContext)
+SecureStorage.deleteDataFile(dataPath)
+_importResult.value = CsvImportResult.Error(
+"Файл данных повреждён и удалён. Импортируйте файл ещё раз."
+)
+return@launch
+}
+// App initialized, data file exists - append imported entries and re-encrypt,
+// preserving the existing salt.
+val decryptedPassword = mainViewModel.getDecryptedPassword().getOrThrow()
 val currentEntries = mainViewModel.uiState.value.allEntries
 val newEntries = currentEntries + entries
-
-try {
-val decryptedPassword = mainViewModel.getDecryptedPassword().getOrThrow()
-
-val dataPath = File(context.filesDir, "passwords.enc").absolutePath
-
 val container = SecureStorage.readContainer(dataPath)
 val salt = if (container.salt.isNullOrEmpty()) {
 CryptoService.generateSalt()
 } else {
 Base64.decode(container.salt, Base64.URL_SAFE or Base64.NO_WRAP)
 }
-
 withContext(Dispatchers.IO) {
 SecureStorage.saveEncryptedWithSalt(newEntries, decryptedPassword, dataPath, salt)
 }
-
 // Update the SHARED MainViewModel so the visible UI refreshes immediately.
-// NOTE: previously this called MainViewModel.saveAndReload(), which also
-// wrote to disk using a DIFFERENT encryption scheme (saveEncrypted without
-// the container salt). That second write corrupted/overwrote the file the
-// import had just saved. saveAndReload() is now state-only.
 mainViewModel.saveAndReload(newEntries)
+}
+
+DataState.SpuriousData -> {
+// determineDataState() already deleted the spurious file above; the app is
+// effectively in FirstTimeUse now - initialize it like the branch above.
+val decryptedPassword = mainViewModel.getDecryptedPassword().getOrThrow()
+val salt = CryptoService.generateSalt()
+withContext(Dispatchers.IO) {
+SecureStorage.saveEncryptedWithSalt(entries, decryptedPassword, dataPath, salt)
+}
+AppInitializer.markAppInitialized(appContext)
+mainViewModel.saveAndReload(entries)
+}
+}
 
 _importResult.value = CsvImportResult.Success(entries)
 } catch (e: Exception) {
@@ -168,7 +210,6 @@ _importResult.value = CsvImportResult.Error("Ошибка сохранения �
 } catch (e: Exception) {
 Log.e("CsvImportViewModel", "ERROR processing file: $uri", e)
 _importResult.value = CsvImportResult.Error("Ошибка чтения файла: ${e.message}")
-}
 }
 }
 }
