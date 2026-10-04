@@ -21,12 +21,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 sealed class CsvImportResult {
-/** Import is running (or waiting for the user to pick a file). */
-object InProgress : CsvImportResult()
-/** The user dismissed the file picker without choosing a file. */
-object Cancelled : CsvImportResult()
-data class Success(val entries: List<PasswordEntry>) : CsvImportResult()
-data class Error(val message: String) : CsvImportResult()
+	/** Import is running (or waiting for the user to pick a file). */
+	object InProgress : CsvImportResult()
+
+	/** The user dismissed the file picker without choosing a file. */
+	object Cancelled : CsvImportResult()
+	data class Success(val entries: List<PasswordEntry>) : CsvImportResult()
+	data class Error(val message: String) : CsvImportResult()
 }
 
 /**
@@ -40,101 +41,105 @@ data class Error(val message: String) : CsvImportResult()
  */
 class CsvImportViewModel : ViewModel() {
 
-companion object {
-@Volatile
-private var sharedMainViewModel: MainViewModel? = null
+	companion object {
+		@Volatile
+		private var sharedMainViewModel: MainViewModel? = null
 
-/** Called by MainActivity right after it creates its MainViewModel. */
-fun attachSharedMainViewModel(vm: MainViewModel) {
-sharedMainViewModel = vm
-}
-}
+		/** Called by MainActivity right after it creates its MainViewModel. */
+		fun attachSharedMainViewModel(vm: MainViewModel) {
+			sharedMainViewModel = vm
+		}
+	}
 
-private val _importResult = MutableStateFlow<CsvImportResult>(CsvImportResult.InProgress)
-val importResult: StateFlow<CsvImportResult> = _importResult
+	private val _importResult = MutableStateFlow<CsvImportResult>(CsvImportResult.InProgress)
+	val importResult: StateFlow<CsvImportResult> = _importResult
 
-fun resetImportState() {
-_importResult.value = CsvImportResult.InProgress
-}
+	fun resetImportState() {
+		_importResult.value = CsvImportResult.InProgress
+	}
 
-fun markCancelled() {
-_importResult.value = CsvImportResult.Cancelled
-}
+	fun markCancelled() {
+		_importResult.value = CsvImportResult.Cancelled
+	}
 
-fun processCsvFile(uri: Uri, context: Context) {
-viewModelScope.launch {
-try {
-val mainViewModel = sharedMainViewModel ?: run {
-_importResult.value = CsvImportResult.Error(
-"Основной экран недоступен: импортированные данные появятся после перезапуска приложения"
-)
-return@launch
-}
+	fun processCsvFile(uri: Uri, context: Context) {
+		viewModelScope.launch {
+			try {
+				val mainViewModel = sharedMainViewModel ?: run {
+					_importResult.value = CsvImportResult.Error(
+						"Основной экран недоступен: импортированные данные появятся после перезапуска приложения"
+					)
+					return@launch
+				}
 
-val inputStream = withContext(Dispatchers.IO) {
-context.contentResolver.openInputStream(uri)
-} ?: run {
-_importResult.value = CsvImportResult.Error("Не удалось открыть файл")
-return@launch
-}
+				val passwordRepository = PasswordRepository.getInstance(context, mainViewModel)
 
-val rawBytes = withContext(Dispatchers.IO) { inputStream.use { it.readBytes() } }
-if (rawBytes.isEmpty()) {
-_importResult.value = CsvImportResult.Error("Файл пуст")
-return@launch
-}
+				val inputStream = withContext(Dispatchers.IO) {
+					context.contentResolver.openInputStream(uri)
+				} ?: run {
+					_importResult.value = CsvImportResult.Error("Не удалось открыть файл")
+					return@launch
+				}
 
-val decodedText = String(rawBytes, charset("windows-1251"))
-val lines = decodedText.split("\r\n", "\n", "\r").map { it.trim() }
+				val rawBytes = withContext(Dispatchers.IO) { inputStream.use { it.readBytes() } }
+				if (rawBytes.isEmpty()) {
+					_importResult.value = CsvImportResult.Error("Файл пуст")
+					return@launch
+				}
 
-if (lines.size <= 1) {
-_importResult.value = CsvImportResult.Error("Файл содержит только заголовок или отсутствуют данные")
-return@launch
-}
+				val decodedText = String(rawBytes, charset("windows-1251"))
+				val lines = decodedText.split("\r\n", "\n", "\r").map { it.trim() }
 
-Log.d("CsvImportViewModel", "First line: ${lines.first()}")
+				if (lines.size <= 1) {
+					_importResult.value =
+						CsvImportResult.Error("Файл содержит только заголовок или отсутствуют данные")
+					return@launch
+				}
 
-val header = lines.first().split(",").map { it.trim().lowercase() }
-val indexOfResource = header.indexOf("resource_name")
-val indexOfLogin = header.indexOf("login")
-val indexOfPassword = header.indexOf("password")
+				Log.d("CsvImportViewModel", "First line: ${lines.first()}")
 
-if (indexOfResource == -1 || indexOfLogin == -1 || indexOfPassword == -1) {
-_importResult.value = CsvImportResult.Error("Неверный формат CSV файла")
-return@launch
-}
+				val header = lines.first().split(",").map { it.trim().lowercase() }
+				val indexOfResource = header.indexOf("resource_name")
+				val indexOfLogin = header.indexOf("login")
+				val indexOfPassword = header.indexOf("password")
 
-val entries = mutableListOf<PasswordEntry>()
-for (i in 1 until lines.size) {
-val line = lines[i]
-val columns = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-.map { it.trim().removeSurrounding("\"") }
+				if (indexOfResource == -1 || indexOfLogin == -1 || indexOfPassword == -1) {
+					_importResult.value = CsvImportResult.Error("Неверный формат CSV файла")
+					return@launch
+				}
 
-fun get(idx: Int) = if (idx in columns.indices) columns[idx] else ""
+				val entries = mutableListOf<PasswordEntry>()
+				for (i in 1 until lines.size) {
+					val line = lines[i]
+					val columns = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
+						.map { it.trim().removeSurrounding("\"") }
 
-val resourceName = get(indexOfResource)
-if (resourceName.isBlank()) continue
+					fun get(idx: Int) = if (idx in columns.indices) columns[idx] else ""
 
-val tagsStr = get(header.indexOf("tags"))
-val tags = if (tagsStr.isNotBlank()) tagsStr.split(";").map { it.trim() } else emptyList()
+					val resourceName = get(indexOfResource)
+					if (resourceName.isBlank()) continue
 
-entries.add(
-PasswordEntry(
-resourceName = resourceName,
-login = get(indexOfLogin),
-password = get(indexOfPassword),
-url = get(header.indexOf("url")),
-email = get(header.indexOf("email")),
-authCode = get(header.indexOf("auth_code")),
-notes = get(header.indexOf("notes")),
-tags = tags
-)
-)
-}
-if (entries.isEmpty()) {
-_importResult.value = CsvImportResult.Error("Файл не содержит данных")
-return@launch
-}
+					val tagsStr = get(header.indexOf("tags"))
+					val tags = if (tagsStr.isNotBlank()) tagsStr.split(";")
+						.map { it.trim() } else emptyList()
+
+					entries.add(
+						PasswordEntry(
+							resourceName = resourceName,
+							login = get(indexOfLogin),
+							password = get(indexOfPassword),
+							url = get(header.indexOf("url")),
+							email = get(header.indexOf("email")),
+							authCode = get(header.indexOf("auth_code")),
+							notes = get(header.indexOf("notes")),
+							tags = tags
+						)
+					)
+				}
+				if (entries.isEmpty()) {
+					_importResult.value = CsvImportResult.Error("Файл не содержит данных")
+					return@launch
+				}
 
 // ==================== State-aware persistence ====================
 // Mirror the logic used when saving a new entry (EntryViewModel): before writing
