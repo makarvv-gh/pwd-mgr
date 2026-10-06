@@ -1,7 +1,7 @@
 package com.example.myklyuchik2.ui.settings
 
-import android.content.Intent
-import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -29,7 +29,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.myklyuchik2.ui.csvimport.CsvImportActivity
+import com.example.myklyuchik2.ui.csvimport.CsvImportHost
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,12 +39,25 @@ fun SettingsScreen(
 	//onNavigateBack = { navController.popBackStack()},
 		// Alternatively, you could use:
 		// navController.navigateUp()
-	onImportCsv: (String) -> Unit,  // Updated to take a file path parameter,
 	onExportCsv: () -> Unit,
+	csvImportHost: CsvImportHost,
 	onChangePassword: () -> Unit = { navController.navigate("change-password") },
 	onCloudClick: () -> Unit // пока заглушка
 ) {
 	val context = LocalContext.current
+
+	// Headless CSV import: the system document picker is launched straight from this
+	// screen — no intermediate Activity, no extra empty screen drawn on top of Settings.
+	// When a file comes back, CsvImportHost parses and persists it in the background.
+	val csvPickerLauncher = rememberLauncherForActivityResult(
+		contract = ActivityResultContracts.OpenDocument()
+	) { uri ->
+		if (uri != null) {
+			CsvImportHost.persistReadPermission(context, uri)
+			csvImportHost.importCsv(uri, context, csvPickerLauncher)
+		}
+	}
+
 	Scaffold(
 		topBar = {
 			TopAppBar(
@@ -70,10 +83,11 @@ fun SettingsScreen(
 					title = "Импорт из CSV",
 					icon = Icons.Default.Upload,
 					onClick = {
-						// CsvImportActivity launches the system file picker itself,
-						// processes the picked CSV, and finishes when done.
-						val intent = Intent(context, CsvImportActivity::class.java)
-						context.startActivity(intent)
+						// Open the system document picker directly from this screen;
+						// no intermediate Activity or extra screen is ever drawn.
+						csvPickerLauncher.launch(
+								arrayOf("text/comma-separated-values", "text/csv", "text/plain")
+						)
 					}
 				)
 			}
