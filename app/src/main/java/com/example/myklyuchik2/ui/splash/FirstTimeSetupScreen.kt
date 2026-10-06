@@ -108,6 +108,11 @@ fun FirstTimeSetupScreen(
                 if (password == confirmPassword && password.isNotBlank()) {
                     val storage = SecurePasswordStorage.getInstance(context)
                     if (storage.initializeWithPassword(password)) {
+                        // Master password is set: mark the app as initialized so the next
+                        // launch goes through the normal splash screen instead of asking
+                        // for a master password again. No data file exists yet, so the
+                        // state resolves to DataState.NoDataYet (empty list on Main screen).
+                        AppInitializer.markAppInitialized(context)
                         onPasswordCreated(password)
                     } else {
                         isError = true

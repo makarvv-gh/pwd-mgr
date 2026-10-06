@@ -31,6 +31,14 @@ sealed class DataState {
 	 * This is the normal use state
 	 */
 	object NormalUse : DataState()
+
+	/**
+	 * Indicates that the marker file exists but no data file is present yet.
+	 * The app has been initialized (master password set) but the user has not
+	 * entered or imported any entries so far. Treated as a normal launch:
+	 * show the regular splash screen and an empty list on the Main screen.
+	 */
+	object NoDataYet : DataState()
 }
 
 /**
