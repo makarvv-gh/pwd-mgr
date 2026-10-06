@@ -248,8 +248,9 @@ class EntryViewModel(
 						// Proceed with creating new file
 						saveEntryWithNewDataFile(entry, masterPassword)
 					}
-					DataState.FirstTimeUse -> {
-						// Create new data file
+					DataState.FirstTimeUse, DataState.NoDataYet -> {
+						// Create new data file (NoDataYet: app was initialized via
+						// master-password setup but no entries were saved yet)
 						saveEntryWithNewDataFile(entry, masterPassword)
 					}
 					DataState.NormalUse -> {

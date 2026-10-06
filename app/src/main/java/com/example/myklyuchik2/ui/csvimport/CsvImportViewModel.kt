@@ -154,8 +154,8 @@ val dataPath = File(appContext.filesDir, "passwords.enc").absolutePath
 val dataState = AppInitializer.determineDataState(appContext)
 
 when (dataState) {
-DataState.FirstTimeUse -> {
-// App not yet initialized - initialize it now:
+DataState.FirstTimeUse, DataState.NoDataYet -> {
+// App not yet initialized (or initialized but no data file yet) - initialize it now:
 // create the data file from scratch (new salt), then the marker file.
 val decryptedPassword = mainViewModel.getDecryptedPassword().getOrThrow()
 val salt = CryptoService.generateSalt()

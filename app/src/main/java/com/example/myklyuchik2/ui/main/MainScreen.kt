@@ -91,6 +91,14 @@ private fun renderEmptyState(
 				textAlign = TextAlign.Center
 			)
 		}
+		DataState.NoDataYet -> {
+			EmptyStateView(
+				hasFilters = false,
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(32.dp)
+			)
+		}
 	}
 }
 // ==================== MainScreen ====================
@@ -123,8 +131,9 @@ fun MainScreen(
 		mutableStateOf(AppInitializer.determineDataState(context))
 	}
 
-	// Handle special cases based on data state
-	LaunchedEffect(Unit) {
+	// Handle special cases based on data state. Keyed on the entry count so it
+	// re-runs when returning here after a CSV import or a first-use save.
+	LaunchedEffect(dataState, state.allEntries.size) {
 		when (dataState) {
 			DataState.SpuriousData -> {
 				// Spurious data was already deleted, nothing to do
@@ -132,12 +141,20 @@ fun MainScreen(
 			DataState.FirstTimeUse -> {
 				// First time use, show empty state
 			}
+			DataState.NoDataYet -> {
+				// App initialized (master password set) but no data file yet:
+				// clear the loading flag so the empty state renders.
+				viewModel.loadEntries()
+			}
 			DataState.NormalUse -> {
 				// Normal use, validate data file
 				if (!SecureStorage.hasValidData(dataFile.absolutePath)) {
 					// Data file is invalid, reset state
 					AppInitializer.clearInstallMarker(context)
 					SecureStorage.deleteDataFile(dataFile.absolutePath)
+				} else {
+					// Load/refresh entries from disk whenever MainScreen appears.
+					viewModel.loadEntries()
 				}
 			}
 		}
