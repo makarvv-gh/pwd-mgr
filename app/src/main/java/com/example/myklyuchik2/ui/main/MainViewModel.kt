@@ -255,6 +255,16 @@ class MainViewModel private constructor(
 		}
 	}
 
+	/** Reports a CSV import failure through the shared event channel (snackbar). */
+	suspend fun notifyCsvImportError(message: String) {
+		_events.send(UiEvent.ShowError(message))
+	}
+
+	/** Reports a CSV import success through the shared event channel (snackbar). */
+	suspend fun notifyCsvImportSuccess(message: String) {
+		_events.send(UiEvent.ShowSuccess(message))
+	}
+
 	suspend fun getDecryptedPassword(): Result<String> {
 		val storage = SecurePasswordStorage.getInstance(context)
 		return try {

@@ -2,9 +2,11 @@ package com.example.myklyuchik2.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.NavHost
@@ -16,7 +18,7 @@ import com.example.myklyuchik2.ui.main.MainScreen
 import com.example.myklyuchik2.ui.splash.SplashScreen
 import com.example.myklyuchik2.ui.settings.SettingsScreen
 import com.example.myklyuchik2.ui.main.MainViewModel
-import com.example.myklyuchik2.ui.csvimport.CsvImportViewModel
+import com.example.myklyuchik2.ui.csvimport.CsvImportHost
 import com.example.myklyuchik2.ui.settings.ChangePasswordScreen
 import com.example.myklyuchik2.ui.splash.FirstTimeSetupScreen
 import com.example.myklyuchik2.utils.Constants
@@ -48,9 +50,12 @@ fun AppNavHost(
 		context = context,
 		assetManager = context.assets
 	)
-	// Publish this MainActivity-owned instance so CsvImportActivity (a different
-	// ViewModelStoreOwner) can update the SAME state the UI observes after an import.
-	CsvImportViewModel.attachSharedMainViewModel(mainViewModel)
+	// Headless CSV import host: kept in the Activity's ViewModelStore so an import
+	// survives recompositions, but it never draws a screen of its own.
+	val csvImportHost: CsvImportHost = viewModel(
+		viewModelStoreOwner = LocalActivity.current as ViewModelStoreOwner,
+		factory = CsvImportHost.factory(mainViewModel)
+	)
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,
@@ -103,8 +108,8 @@ fun AppNavHost(
 			SettingsScreen(
 				navController = navController,
 				onNavigateBack = { navController.popBackStack() },
-				onImportCsv = { /* Handle import CSV action */ },
 				onExportCsv = { /* Handle export CSV action */ },
+				csvImportHost = csvImportHost,
 				onChangePassword = { navController.navigate("change-password") },
 				onCloudClick = { /* Handle cloud sync action */ }
 			)

@@ -7,7 +7,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.activity.compose.setContent
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.ui.navigation.AppNavHost
-import com.example.myklyuchik2.ui.csvimport.CsvImportViewModel
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
