@@ -68,6 +68,13 @@ class MainActivity : FragmentActivity() {
 				// Normal launch, data is valid
 				shouldShowFirstTimeSetup = false
 			}
+
+			DataState.NoDataYet -> {
+				// Normal launch, but no data's been entered or imported yet:
+				// master password is already set, show the regular splash screen
+				// and an empty list on the Main screen.
+				shouldShowFirstTimeSetup = false
+			}
 		}
 
 		setContent {
@@ -93,8 +100,10 @@ class MainActivity : FragmentActivity() {
 			}
 		}
 
-		if (shouldShowFirstTimeSetup) {
-			AppInitializer.markAppInitialized(this)
-		}
+		// NOTE: the install marker is NOT created here anymore. It is created only
+		// after the user has actually set a master password in FirstTimeSetupScreen
+		// (or saved/imported the first entry). Creating it at launch time would make
+		// an abandoned first-time setup look like an initialized app and leave stale
+		// biometric-key aliases behind.
 	}
 }

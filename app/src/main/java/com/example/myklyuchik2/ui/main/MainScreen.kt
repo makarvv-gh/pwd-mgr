@@ -91,6 +91,14 @@ private fun renderEmptyState(
 				textAlign = TextAlign.Center
 			)
 		}
+		DataState.NoDataYet -> {
+			EmptyStateView(
+				hasFilters = false,
+				modifier = Modifier
+					.fillMaxWidth()
+					.padding(32.dp)
+			)
+		}
 	}
 }
 // ==================== MainScreen ====================
@@ -132,6 +140,11 @@ fun MainScreen(
 			}
 			DataState.FirstTimeUse -> {
 				// First time use, show empty state
+			}
+			DataState.NoDataYet -> {
+				// App initialized (master password set) but no data file yet:
+				// clear the loading flag so the empty state renders.
+				viewModel.loadEntries()
 			}
 			DataState.NormalUse -> {
 				// Normal use, validate data file

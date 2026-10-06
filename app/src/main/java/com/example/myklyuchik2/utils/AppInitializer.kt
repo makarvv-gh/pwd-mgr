@@ -35,6 +35,12 @@ object AppInitializer {
 				Log.d("AppInitializer", "First-time use: neither file exists")
 				DataState.FirstTimeUse
 			}
+			// No data yet: marker exists but the data file hasn't been created
+			// (master password was set, but no entries were entered or imported)
+			!dataFile.exists() && markerFile.exists() -> {
+				Log.d("AppInitializer", "No data yet: marker exists, data file missing")
+				DataState.NoDataYet
+			}
 			// Normal use: both files exist
 			else -> {
 				Log.d("AppInitializer", "Normal use: both files exist")
