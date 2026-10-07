@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -28,11 +27,11 @@ import kotlinx.coroutines.withContext
  * window for a moment before the user was returned to Settings — it did not follow the
  * day/night color scheme and simply slowed the app down.
  *
- * Now nothing is drawn at all: [SettingsScreen] registers an [ActivityResultLauncher] with
+ * Now nothing is drawn at all: [SettingsScreen] registers a picker launcher with
  * [androidx.activity.compose.rememberLauncherForActivityResult] and launches the system
  * picker directly. When a file comes back, this ViewModel parses it, persists the entries
- * into the encrypted store, updates the shared [MainViewModel] state and finishes the
- * request itself — so the user never leaves the Settings screen.
+ * into the encrypted store, updates the shared [MainViewModel] state and reports the result
+ * via its snackbar events — so the user never leaves the Settings screen.
  */
 class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
 
@@ -73,25 +72,23 @@ class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
          * [MainViewModel] event channel (a snackbar on the main screen) instead of a UI of
          * their own — again, so that no extra screen ever has to be drawn.
          */
-        fun importCsv(uri: Uri, context: Context, resultLauncher: ActivityResultLauncher<Void?>) {
+        fun importCsv(uri: Uri, context: Context) {
                 viewModelScope.launch {
                         try {
-                                val passwordRepository = com.example.myklyuchik2.data.repository.PasswordRepository
-                                        .getInstance(context, mainViewModel)
                                 val entries = parseCsv(uri, context)
 
                                 if (entries == null) {
-                                        // An error toast was already emitted by parseCsv().
-                                        finish(resultLauncher, "Импорт не выполнен")
+                                        // The error was already reported by parseCsv() through
+                                        // the MainViewModel event channel.
                                         return@launch
                                 }
 
                                 persistEntries(entries)
                                 Log.d(TAG, "Imported ${entries.size} entries from $uri")
-                                finish(resultLauncher, "Импортировано записей: ${entries.size}")
+                                notifySuccess("Импортировано записей: ${entries.size}")
                         } catch (e: Exception) {
                                 Log.e(TAG, "ERROR processing file: $uri", e)
-                                finish(resultLauncher, "Ошибка импорта: ${e.message}")
+                                notifyError("Ошибка импорта: ${e.message}")
                         }
                 }
         }
@@ -211,11 +208,7 @@ class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
                                 val currentEntries = mainViewModel.uiState.value.allEntries
                                 val newEntries = currentEntries + entries
                                 val container = withContext(Dispatchers.IO) { SecureStorage.readContainer(dataPath) }
-                                val salt = if (container.salt.isNullOrEmpty()) {
-                                        CryptoService.generateSalt()
-                                } else {
-                                        android.util.Base64.decode(container.salt, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP)
-                                }
+                                val salt = android.util.Base64.decode(container.salt, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP)
                                 withContext(Dispatchers.IO) {
                                         SecureStorage.saveEncryptedWithSalt(newEntries, decryptedPassword, dataPath, salt)
                                 }
@@ -240,14 +233,7 @@ class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
                 mainViewModel.notifyCsvImportError(message)
         }
 
-        /** Closes the pending picker request so it never stays half-finished. */
-        private fun finish(resultLauncher: ActivityResultLauncher<Void?>, message: String?) {
-                try {
-                        resultLauncher.finish()
-                } catch (e: IllegalStateException) {
-                        // Already delivered/finished - nothing to do.
-                        Log.w(TAG, "Picker request already finished", e)
-                }
-                message?.let { mainViewModel.notifyCsvImportSuccess(it) }
+        private suspend fun notifySuccess(message: String) {
+                mainViewModel.notifyCsvImportSuccess(message)
         }
 }

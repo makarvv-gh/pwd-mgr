@@ -54,7 +54,7 @@ fun SettingsScreen(
 	) { uri ->
 		if (uri != null) {
 			CsvImportHost.persistReadPermission(context, uri)
-			csvImportHost.importCsv(uri, context, csvPickerLauncher)
+			csvImportHost.importCsv(uri, context)
 		}
 	}
 
