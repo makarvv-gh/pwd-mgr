@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import androidx.activity.result.ActivityResultLauncher
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -73,25 +72,23 @@ class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
          * [MainViewModel] event channel (a snackbar on the main screen) instead of a UI of
          * their own — again, so that no extra screen ever has to be drawn.
          */
-        fun importCsv(uri: Uri, context: Context, resultLauncher: ActivityResultLauncher<Void?>) {
+        fun importCsv(uri: Uri, context: Context) {
                 viewModelScope.launch {
                         try {
-                                val passwordRepository = com.example.myklyuchik2.data.repository.PasswordRepository
-                                        .getInstance(context, mainViewModel)
                                 val entries = parseCsv(uri, context)
 
                                 if (entries == null) {
-                                        // An error toast was already emitted by parseCsv().
-                                        finish(resultLauncher, "Импорт не выполнен")
+                                        // The error was already reported by parseCsv() through
+                                        // the MainViewModel event channel.
                                         return@launch
                                 }
 
                                 persistEntries(entries)
                                 Log.d(TAG, "Imported ${entries.size} entries from $uri")
-                                finish(resultLauncher, "Импортировано записей: ${entries.size}")
+                                notifySuccess("Импортировано записей: ${entries.size}")
                         } catch (e: Exception) {
                                 Log.e(TAG, "ERROR processing file: $uri", e)
-                                finish(resultLauncher, "Ошибка импорта: ${e.message}")
+                                notifyError("Ошибка импорта: ${e.message}")
                         }
                 }
         }
@@ -240,14 +237,7 @@ class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
                 mainViewModel.notifyCsvImportError(message)
         }
 
-        /** Closes the pending picker request so it never stays half-finished. */
-        private fun finish(resultLauncher: ActivityResultLauncher<Void?>, message: String?) {
-                try {
-                        resultLauncher.finish()
-                } catch (e: IllegalStateException) {
-                        // Already delivered/finished - nothing to do.
-                        Log.w(TAG, "Picker request already finished", e)
-                }
-                message?.let { mainViewModel.notifyCsvImportSuccess(it) }
+        private suspend fun notifySuccess(message: String) {
+                mainViewModel.notifyCsvImportSuccess(message)
         }
 }

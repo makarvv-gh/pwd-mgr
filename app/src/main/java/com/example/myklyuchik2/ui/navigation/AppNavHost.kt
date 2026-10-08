@@ -1,8 +1,10 @@
 package com.example.myklyuchik2.ui.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModel
@@ -44,18 +46,39 @@ fun AppNavHost(
 ) {
 	val startDestination = if (isFirstUse) "first_time" else "splash"
 // ✅ Declare it first
-	val context = LocalContext.current.applicationContext
-
+	//val context = LocalContext.current.applicationContext
+	val context = LocalContext.current
+	val appContext = context.applicationContext
 	val mainViewModel: MainViewModel = MainViewModel.getInstance(
-		context = context,
-		assetManager = context.assets
+		//context = context,
+		//assetManager = context.assets
+		context = appContext,
+		assetManager = appContext.assets
 	)
 	// Headless CSV import host: kept in the Activity's ViewModelStore so an import
 	// survives recompositions, but it never draws a screen of its own.
+	// IMPORTANT: the file-picker launcher below must be registered against this SAME
+	// owner (the Activity). rememberLauncherForActivityResult picks its LifecycleOwner
+	// from LocalLifecycleOwner; inside a composable() that is the NavBackStackEntry,
+	// which gets DESTROYED when Settings is popped — its recycled request code then
+	// reaches >= 65536 and launch() crashes with
+	// "Can only use lower 16 bits for requestCode". Registering at NavHost level ties
+	// the launcher to the Activity lifecycle, which is always STARTED before launch().
+
+	val activity = context.findActivity()
 	val csvImportHost: CsvImportHost = viewModel(
-		viewModelStoreOwner = LocalActivity.current as ViewModelStoreOwner,
+		viewModelStoreOwner = activity,
 		factory = CsvImportHost.factory(mainViewModel)
 	)
+	val csvPickerLauncher = activity.activityResultRegistry.register(
+		"csv-import-picker",
+		ActivityResultContracts.OpenDocument()
+	) { uri ->
+		if (uri != null) {
+			CsvImportHost.persistReadPermission(appContext, uri)
+			csvImportHost.importCsv(uri, appContext)
+		}
+	}
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,
@@ -69,13 +92,6 @@ fun AppNavHost(
 			)
 		}
 
-		/*composable("first_time") {
-			FirstTimeSetupScreen(onPasswordCreated = { password ->
-				navController.navigate(Screen.Main.route) {
-					popUpTo("first_time") { inclusive = true }
-				}
-			})
-		}*/
 		composable("first_time") {
 			FirstTimeSetupScreen { password ->
 				navController.navigate(Screen.Main.route) {
@@ -110,6 +126,7 @@ fun AppNavHost(
 				onNavigateBack = { navController.popBackStack() },
 				onExportCsv = { /* Handle export CSV action */ },
 				csvImportHost = csvImportHost,
+				csvPickerLauncher = csvPickerLauncher,
 				onChangePassword = { navController.navigate("change-password") },
 				onCloudClick = { /* Handle cloud sync action */ }
 			)
@@ -134,13 +151,7 @@ fun AppNavHost(
 			val mode = EntryMode.valueOf(
 				backStackEntry.arguments?.getString("mode") ?: EntryMode.CREATE.name
 			)
-			/*/ ✅ Declare it first
-			val mainViewModel: MainViewModel = viewModel(
-				factory = MainViewModel.Factory(
-					context = LocalContext.current.applicationContext,
-					assetManager = LocalContext.current.assets
-				)
-			)*/
+
 			EntryScreen(
 				mode = mode,
 				entryId = if (entryId == "new") null else entryId,
@@ -157,4 +168,21 @@ fun AppNavHost(
 			)
 		}
 	}
+}
+/** Resolves the Activity hosting a Compose view by walking up wrapped contexts. */
+/*internal fun android.content.Context.findActivity(): android.app.Activity {
+	var ctx: android.content.Context = this
+	while (ctx is android.content.ContextWrapper) {
+		if (ctx is android.app.Activity) return ctx
+		ctx = ctx.baseContext
+	}
+	error("No Activity found in context chain")
+}*/
+internal fun android.content.Context.findActivity(): androidx.activity.ComponentActivity {
+	var ctx: android.content.Context = this
+	while (ctx is android.content.ContextWrapper) {
+		if (ctx is androidx.activity.ComponentActivity) return ctx
+		ctx = ctx.baseContext
+	}
+	error("No ComponentActivity found in context chain")
 }

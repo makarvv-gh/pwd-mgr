@@ -2,6 +2,7 @@ package com.example.myklyuchik2.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,22 +42,23 @@ fun SettingsScreen(
 		// navController.navigateUp()
 	onExportCsv: () -> Unit,
 	csvImportHost: CsvImportHost,
+	csvPickerLauncher: ActivityResultLauncher<Array<String>>,
 	onChangePassword: () -> Unit = { navController.navigate("change-password") },
 	onCloudClick: () -> Unit // пока заглушка
 ) {
-	val context = LocalContext.current
+	//val context = LocalContext.current
 
 	// Headless CSV import: the system document picker is launched straight from this
 	// screen — no intermediate Activity, no extra empty screen drawn on top of Settings.
 	// When a file comes back, CsvImportHost parses and persists it in the background.
-	val csvPickerLauncher = rememberLauncherForActivityResult(
+	/*val csvPickerLauncher = rememberLauncherForActivityResult(
 		contract = ActivityResultContracts.OpenDocument()
 	) { uri ->
 		if (uri != null) {
 			CsvImportHost.persistReadPermission(context, uri)
-			csvImportHost.importCsv(uri, context, csvPickerLauncher)
+			csvImportHost.importCsv(uri, context)
 		}
-	}
+	}*/
 
 	Scaffold(
 		topBar = {
