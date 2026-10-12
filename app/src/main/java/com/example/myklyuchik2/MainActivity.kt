@@ -14,6 +14,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.myklyuchik2.ui.navigation.AppNavHost
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
+import com.example.myklyuchik2.ui.csvimport.CsvPendingImport
+import com.example.myklyuchik2.utils.Constants
 import java.io.File
 import android.util.Log
 import com.example.myklyuchik2.utils.AppInitializer
@@ -26,6 +28,14 @@ import androidx.activity.OnBackPressedCallback
 class MainActivity : FragmentActivity() {
 	private var backPressCount = 0
 
+	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+		if (requestCode == Constants.CSV_IMPORT_REQUEST_CODE) {
+			val uri = if (resultCode == RESULT_OK) data?.data else null
+			CsvPendingImport.callback?.invoke(uri)
+			return // в реестре для этого кода ничего не зарегистрировано
+		}
+		super.onActivityResult(requestCode, resultCode, data)
+	}
 	override fun onCreate(savedInstanceState: Bundle?) {
 		super.onCreate(savedInstanceState)
 		// Handle back press using the correct OnBackPressedDispatcher API
