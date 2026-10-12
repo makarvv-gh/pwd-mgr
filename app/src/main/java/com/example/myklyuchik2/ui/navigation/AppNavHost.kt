@@ -2,9 +2,12 @@ package com.example.myklyuchik2.ui.navigation
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityOptionsCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModel
@@ -57,28 +60,35 @@ fun AppNavHost(
 	)
 	// Headless CSV import host: kept in the Activity's ViewModelStore so an import
 	// survives recompositions, but it never draws a screen of its own.
-	// IMPORTANT: the file-picker launcher below must be registered against this SAME
-	// owner (the Activity). rememberLauncherForActivityResult picks its LifecycleOwner
-	// from LocalLifecycleOwner; inside a composable() that is the NavBackStackEntry,
-	// which gets DESTROYED when Settings is popped — its recycled request code then
-	// reaches >= 65536 and launch() crashes with
-	// "Can only use lower 16 bits for requestCode". Registering at NavHost level ties
-	// the launcher to the Activity lifecycle, which is always STARTED before launch().
-
 	val activity = context.findActivity()
 	val csvImportHost: CsvImportHost = viewModel(
 		viewModelStoreOwner = activity,
 		factory = CsvImportHost.factory(mainViewModel)
 	)
-	val csvPickerLauncher = activity.activityResultRegistry.register(
-		"csv-import-picker",
-		ActivityResultContracts.OpenDocument()
-	) { uri ->
-		if (uri != null) {
-			CsvImportHost.persistReadPermission(appContext, uri)
-			csvImportHost.importCsv(uri, appContext)
-		}
-	}
+	// ROOT CAUSE OF THE CRASH ("Can only use lower 16 bits for requestCode"):
+	// MainActivity extends FragmentActivity (it must — biometric prompts go through
+	// androidx.biometric, which requires a FragmentActivity). ComponentActivity overrides
+	// startActivityForResult() and delegates to FragmentActivity.startActivityForResult(),
+	// which enforces the classic fragment request-code window [0, 0xFFFF]. But since
+	// androidx.activity 1.9, ActivityResultRegistry generates its internal request codes as
+	// RANDOM numbers starting from INITIAL_REQUEST_CODE_VALUE = 0x10000 (65536) — i.e. always
+	// ABOVE that window (verified in activity-1.13.0 sources: ActivityResultRegistry.kt, line
+	// "private const val INITIAL_REQUEST_CODE_VALUE = 0x00010000"). So every launcher
+	// registered against a FragmentActivity's registry crashes inside launch() -> onLaunch()
+	// -> ActivityCompat.startActivityForResult(), before the picker UI ever appears. That is
+	// why none of the previous fixes helped: moving the registration from the NavBackStackEntry
+	// up to the Activity level fixed the lifecycle problem but could not fix this arithmetic
+	// incompatibility between androidx.activity and androidx.fragment.
+	// FIX: bypass the ActivityResultRegistry entirely and start ACTION_OPEN_DOCUMENT directly
+	// with a plain, valid fragment request code via FragmentActivity.startActivityForResult().
+	// The result comes back through MainActivity.onActivityResult (see MainActivity.kt) and is
+	// handed to CsvImportHost there. One fixed request code is never recycled per navigation
+	// destination, so nothing can ever exceed 16 bits.
+	val csvPickerLauncher = rememberCsvPickerLauncher(
+		activity = activity,
+		csvImportHost = csvImportHost,
+		appContext = appContext
+	)
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,
@@ -170,19 +180,67 @@ fun AppNavHost(
 	}
 }
 /** Resolves the Activity hosting a Compose view by walking up wrapped contexts. */
-/*internal fun android.content.Context.findActivity(): android.app.Activity {
+internal fun android.content.Context.findActivity(): androidx.fragment.app.FragmentActivity {
 	var ctx: android.content.Context = this
 	while (ctx is android.content.ContextWrapper) {
-		if (ctx is android.app.Activity) return ctx
+		if (ctx is androidx.fragment.app.FragmentActivity) return ctx
 		ctx = ctx.baseContext
 	}
-	error("No Activity found in context chain")
-}*/
-internal fun android.content.Context.findActivity(): androidx.activity.ComponentActivity {
-	var ctx: android.content.Context = this
-	while (ctx is android.content.ContextWrapper) {
-		if (ctx is androidx.activity.ComponentActivity) return ctx
-		ctx = ctx.baseContext
+	error("No FragmentActivity found in context chain")
+}
+
+/**
+ * Builds the CSV file-picker launcher used by [com.example.myklyuchik2.ui.settings.SettingsScreen].
+ *
+ * Deliberately does NOT use ActivityResultRegistry / rememberLauncherForActivityResult:
+ * this app's MainActivity is a FragmentActivity, and registry-generated request codes are
+ * >= 0x10000, which FragmentActivity.startActivityForResult() rejects with
+ * "Can only use lower 16 bits for requestCode" (see the long comment at the call site).
+ * Instead we start ACTION_OPEN_DOCUMENT with a fixed small request code; the result is
+ * delivered to MainActivity.onActivityResult(), which routes it to CsvImportHost via
+ * CsvPendingImport (see csvimport/CsvImportHost.kt).
+ */
+@Composable
+internal fun rememberCsvPickerLauncher(
+	activity: androidx.fragment.app.FragmentActivity,
+	csvImportHost: CsvImportHost,
+	appContext: android.content.Context,
+): ActivityResultLauncher<Array<String>> {
+	// Keep the latest host/context in a remembered state so the stable launcher object
+	// never captures a stale reference after recomposition.
+	val currentHost = androidx.compose.runtime.rememberUpdatedState(csvImportHost)
+	val currentContext = androidx.compose.runtime.rememberUpdatedState(appContext)
+	val currentActivity = androidx.compose.runtime.rememberUpdatedState(activity)
+
+	// Register the pending callback once per composition; it survives because it lives in
+	// the process-wide CsvPendingImport holder, not tied to any lifecycle owner.
+	androidx.compose.runtime.DisposableEffect(Unit) {
+		CsvPendingImport.callback = { uri ->
+			if (uri != null) {
+				CsvImportHost.persistReadPermission(currentContext.value, uri)
+				currentHost.value.importCsv(uri, currentContext.value)
+			}
+		}
+		onDispose { CsvPendingImport.callback = null }
 	}
-	error("No ComponentActivity found in context chain")
+
+	return remember(activity) {
+		object : ActivityResultLauncher<Array<String>>() {
+			override fun launch(input: Array<String>, options: ActivityOptionsCompat?) {
+				val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+					.addCategory(android.content.Intent.CATEGORY_OPENABLE)
+					.setType("*/*")
+					.putExtra(android.content.Intent.EXTRA_MIME_TYPES, input)
+				// Fixed, tiny request code — always valid for FragmentActivity.
+				currentActivity.value.startActivityForResult(
+					intent, Constants.CSV_IMPORT_REQUEST_CODE
+				)
+			}
+
+			override fun unregister() { /* no-op: nothing was registered in the registry */ }
+
+			override val contract: ActivityResultContract<Array<String>, Uri?>
+				get() = ActivityResultContracts.OpenDocument()
+		}
+	}
 }
