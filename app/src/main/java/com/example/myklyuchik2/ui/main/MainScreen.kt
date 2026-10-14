@@ -258,22 +258,11 @@ fun MainScreen(
 						entry = entry ?: return@items, // Add null check
 						onEdit = { onEditEntry(entry) },
 						onDelete = {
-							//onDeleteEntry(entry)
-							viewModel.deleteEntry(entry)
-							// Показываем диалог подтверждения удаления
-							// (реализация ниже через showModal)
-							scope.launch {
-								val result = snackbarHostState.showSnackbar(
-									message = "Удалить «${entry.resourceName}»?",
-									actionLabel = "Удалить",
-									duration = SnackbarDuration.Short
-								)
-								if (result == SnackbarResult.ActionPerformed) {
-									//onDeleteEntry(entry)
-									viewModel.deleteEntry(entry)
-								}
-							}
-						}
+							/// Only show the dialog — Snackbar is redundant
+							// viewModel.deleteEntry(entry) is already called in the dialog
+							//showDeleteConfirm = true
+						},
+						viewModel = viewModel
 					)
 				}
 				// Handle empty file or file with invalid structure
@@ -383,6 +372,7 @@ fun PasswordListItem(
     entry: PasswordEntry,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
    // @OptIn(ExperimentalMaterial3Api::class)
@@ -486,7 +476,8 @@ fun PasswordListItem(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        onDelete()
+                        //onDelete()
+	                    viewModel.deleteEntry(entry)
 						showDeleteConfirm = false
                     },
                     colors = ButtonDefaults.textButtonColors(
