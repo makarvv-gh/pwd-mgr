@@ -2,6 +2,7 @@ package com.example.myklyuchik2.data.importexport
 
 import android.content.res.AssetManager
 import com.example.myklyuchik2.data.model.PasswordEntry
+import com.example.myklyuchik2.utils.DateFormatter
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.nio.charset.Charset
@@ -30,6 +31,7 @@ object CsvImporter {
 		val indexOfLogin = header.indexOf("login")
 		val indexOfPassword = header.indexOf("password")
 		val indexOfUrl = header.indexOf("url")
+		val indexOfChangeDate = header.indexOf("change_date")
 		val indexOfEmail = header.indexOf("email")
 		val indexOfAuth = header.indexOf("auth_code")
 		val indexOfNotes = header.indexOf("notes")
@@ -50,11 +52,20 @@ object CsvImporter {
 			val tagsStr = get(indexOfTags)
 			val tags = if (tagsStr.isNotBlank()) tagsStr.split(";").map { it.trim() } else emptyList()
 
+			val changeDateStr = get(indexOfChangeDate)
+			val parsedChangeDate = if (changeDateStr.isNotBlank()) {
+				DateFormatter.parseInputDate(changeDateStr)?.let { DateFormatter.formatForStorage(it) }
+				// If parsing failed, leave it as empty string
+			} else {
+				"" // ✅ If empty in CSV, stays empty
+			}
+
 			entries.add(
 				PasswordEntry(
 					resourceName = resourceName,
 					login = get(indexOfLogin),
 					password = get(indexOfPassword),
+					changeDate = parsedChangeDate ?: "", // ✅ formatted, Safe assignment
 					url = get(indexOfUrl),
 					email = get(indexOfEmail),
 					authCode = get(indexOfAuth),

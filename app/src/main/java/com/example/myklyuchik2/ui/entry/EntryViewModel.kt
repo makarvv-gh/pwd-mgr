@@ -12,6 +12,7 @@ import com.example.myklyuchik2.ui.main.model.UiState
 import com.example.myklyuchik2.utils.AppInitializer
 import com.example.myklyuchik2.data.storage.DataState
 import com.example.myklyuchik2.data.encryption.CryptoService
+import com.example.myklyuchik2.utils.DateFormatter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +29,7 @@ data class EntryFormState(
 	val resourceName: String = "",
 	val login: String = "",
 	val password: String = "",
-	val changeDate: String = Date().toString(), // Не меняется автоматически
+	val changeDate: String = "", // Не меняется автоматически
 	val url: String = "",
 	val email: String = "",
 	val authCode: String = "",
@@ -58,9 +59,7 @@ data class EntryFormState(
 		email = email.trim(),
 		authCode = authCode.trim(),
 		notes = notes.trim(),
-		tags = tags,
-		createdAt = if (id == UUID.randomUUID().toString()) Date().toString() else "", // Заполнится при создании
-		updatedAt = Date().toString()
+		tags = tags
 	)
 }
 
@@ -188,7 +187,19 @@ class EntryViewModel(
 	}
 
 	fun updateChangeDate(value: String) {
-		_formState.update { it.copy(changeDate = value) }
+		val parsedDate = DateFormatter.parseInputDate(value)
+		if (parsedDate != null) {
+			_formState.update {
+				it.copy(changeDate = DateFormatter.formatForStorage(parsedDate))
+			}
+		} else {
+			_formState.update {
+				it.copy(
+					changeDate = it.changeDate,
+					error = "Неверный формат даты. Используйте YYYY-MM-DD"
+				)
+			}
+		}
 	}
 
 	// Показ/скрытие пароля
@@ -284,20 +295,14 @@ class EntryViewModel(
 				// Update existing entry: retain createdAt, update updatedAt
 				existingEntries.map {
 					if (it.id == entry.id) {
-						entry.copy(
-							createdAt = it.createdAt, // Retain original creation date
-							updatedAt = Date().toString()
-						)
+						entry.copy()
 					} else {
 						it
 					}
 				}
 			} else {
 				// Create new entry: set both dates
-				existingEntries + entry.copy(
-					createdAt = Date().toString(),
-					updatedAt = Date().toString()
-				)
+				existingEntries + entry.copy()
 			}
 
 			// Save updated entries
@@ -333,9 +338,7 @@ class EntryViewModel(
 
 			// Create new list with entry, set both dates
 			val updatedEntry = entry.copy(
-				id = entry.id.ifBlank { UUID.randomUUID().toString() },
-				createdAt = Date().toString(),
-				updatedAt = Date().toString()
+				id = entry.id.ifBlank { UUID.randomUUID().toString() }
 			)
 
 			// Save encrypted data

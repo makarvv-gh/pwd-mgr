@@ -2,20 +2,19 @@ package com.example.myklyuchik2.data.model
 
 import java.util.Date
 import java.util.UUID
+import com.example.myklyuchik2.utils.DateFormatter
 
 data class PasswordEntry(
 	val id: String = UUID.randomUUID().toString(),
 	val resourceName: String,
 	val login: String,
 	val password: String,
-	val changeDate: String = Date().toString(),
+	val changeDate: String = DateFormatter.formatForStorage(java.util.Date()),
 	val url: String = "",
 	val email: String = "",
 	val authCode: String = "",
 	val notes: String = "",
-	val tags: List<String> = emptyList(),
-	val createdAt: String = Date().toString(),
-	val updatedAt: String = Date().toString()
+	val tags: List<String> = emptyList()
 ) {
 	fun toDict(): Map<String, Any?> = mapOf(
 		"id" to id,
@@ -27,9 +26,7 @@ data class PasswordEntry(
 		"email" to email,
 		"auth_code" to authCode,
 		"notes" to notes,
-		"tags" to tags,
-		"created_at" to createdAt,
-		"updated_at" to updatedAt
+		"tags" to tags
 	)
 
 	companion object {
@@ -41,14 +38,12 @@ data class PasswordEntry(
 				resourceName = map["resource_name"] as? String ?: "",
 				login = map["login"] as? String ?: "",
 				password = map["password"] as? String ?: "",
-				changeDate = map["change_date"] as? String ?: Date().toString(),
+				changeDate = map["change_date"] as? String ?: "",
 				url = map["url"] as? String ?: "",
 				email = map["email"] as? String ?: "",
 				authCode = map["auth_code"] as? String ?: "",
 				notes = map["notes"] as? String ?: "",
-				tags = tagsList,
-				createdAt = map["created_at"] as? String ?: Date().toString(),
-				updatedAt = map["updated_at"] as? String ?: Date().toString()
+				tags = tagsList
 			)
 		}
 	}

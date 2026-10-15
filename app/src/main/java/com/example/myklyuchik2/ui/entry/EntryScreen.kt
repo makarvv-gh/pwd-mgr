@@ -32,6 +32,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myklyuchik2.ui.main.model.EntryMode
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
 import com.example.myklyuchik2.utils.Constants
+import com.example.myklyuchik2.utils.DateFormatter
 import com.example.myklyuchik2.ui.main.MainViewModel
 import com.example.myklyuchik2.ui.entry.EntryViewModel
 import java.io.File
@@ -136,8 +137,7 @@ fun EntryScreen(
 				),
 				modifier = Modifier.fillMaxWidth()
 			)
-
-//=== Логин (обязательно) ===
+			//=== Логин (обязательно) ===
 			OutlinedTextField(
 				value = state.login,
 				onValueChange = viewModel::updateLogin,
@@ -188,8 +188,21 @@ fun EntryScreen(
 			)
 
 			// === Дата изменения пароля  ===
+			// Safely format changeDate for display (DD.MM.YYYY)
+			val displayDate = if (state.changeDate.isNotBlank()) {
+				try {
+					val localDate = java.time.LocalDate.parse(state.changeDate)
+					val date = java.util.Date.from(localDate.atStartOfDay(java.time.ZoneId.systemDefault()).toInstant())
+					DateFormatter.formatForDisplay(date)
+				} catch (e: Exception) {
+					""
+				}
+			} else {
+				""
+			}
+
 			OutlinedTextField(
-				value = state.changeDate,
+				value = displayDate,
 				onValueChange = viewModel::updateChangeDate,
 				label = { Text("Датаизменения пароля") },
 				placeholder = { Text("Например: 2024-01-15") },

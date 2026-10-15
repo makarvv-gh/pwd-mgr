@@ -133,17 +133,17 @@ class MainViewModel private constructor(
 		}
 	}
 
-	fun updateEntry(updated: PasswordEntry) {
+	/*fun updateEntry(updated: PasswordEntry) {
 		viewModelScope.launch {
 			val current = _uiState.value.allEntries.toMutableList()
 			val idx = current.indexOfFirst { it.id == updated.id }
 			if (idx >= 0) {
-				current[idx] = updated.copy(updatedAt = Date().toString())
+				current[idx] = updated.copy()
 				saveAndPersist(current)
 			}
 			_events.send(UiEvent.NavigateBack)
 		}
-	}
+	}*/
 
 	fun deleteEntry(entry: PasswordEntry) {
 		viewModelScope.launch {
