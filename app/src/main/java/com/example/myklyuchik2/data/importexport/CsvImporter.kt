@@ -40,9 +40,7 @@ object CsvImporter {
 		val entries = mutableListOf<PasswordEntry>()
 		for (i in 1 until lines.size) {
 			val line = lines[i]
-			// Простой split с учётом кавычек
-			val columns = line.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex())
-				.map { it.trim().removeSurrounding("\"") }
+			val columns = parseCsvLine(line)
 
 			fun get(idx: Int) = if (idx in columns.indices) columns[idx] else ""
 
@@ -50,7 +48,6 @@ object CsvImporter {
 			if (resourceName.isBlank()) continue
 
 			val tagsStr = get(indexOfTags)
-			val tags = if (tagsStr.isNotBlank()) tagsStr.split(";").map { it.trim() } else emptyList()
 
 			val changeDateStr = get(indexOfChangeDate)
 			val parsedChangeDate = if (changeDateStr.isNotBlank()) {
@@ -70,11 +67,54 @@ object CsvImporter {
 					email = get(indexOfEmail),
 					authCode = get(indexOfAuth),
 					notes = get(indexOfNotes),
-					tags = tags
+					tags = if (tagsStr.isNotBlank()) tagsStr.split(",").map { it.trim() } else emptyList()
 				)
 			)
 		}
 		reader.close()
 		return entries
 	}
+}
+/**
+ * Parses a CSV line, properly handling quoted fields that may contain commas
+ * For example: "www,work" will be treated as a single field value
+ */
+private fun parseCsvLine(line: String): List<String> {
+	val result = mutableListOf<String>()
+	val sb = StringBuilder()
+	var inQuotes = false
+
+	var i = 0
+	while (i < line.length) {
+		val c = line[i]
+
+		if (c == '"') {
+			if (inQuotes) {
+				// Check if it's an escaped quote ("")
+				if (i + 1 < line.length && line[i + 1] == '"') {
+					sb.append('"')
+					i++ // Skip the next quote
+				} else {
+					// Closing quote
+					inQuotes = false
+				}
+			} else {
+				// Opening quote
+				inQuotes = true
+			}
+		} else if (c == ',' && !inQuotes) {
+			// Field separator
+			result.add(sb.toString().trim())
+			sb.clear()
+		} else {
+			// Regular character
+			sb.append(c)
+		}
+		i++
+	}
+
+	// Add the last field
+	result.add(sb.toString().trim())
+
+	return result
 }

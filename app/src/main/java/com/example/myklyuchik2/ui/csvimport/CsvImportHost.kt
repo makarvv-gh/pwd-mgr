@@ -147,7 +147,7 @@ class CsvImportHost(private val mainViewModel: MainViewModel) : ViewModel() {
                         if (resourceName.isBlank()) continue
 
                         val tagsStr = get(header.indexOf("tags"))
-                        val tags = if (tagsStr.isNotBlank()) tagsStr.split(";")
+                        val tags = if (tagsStr.isNotBlank()) tagsStr.split(",")
                                 .map { it.trim() } else emptyList()
 
                         entries.add(
