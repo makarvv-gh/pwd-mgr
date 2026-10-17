@@ -1,6 +1,7 @@
 package com.example.myklyuchik2.utils
 object Constants {
 	const val CSV_IMPORT_REQUEST_CODE = 0x2A01
+	const val CSV_EXPORT_REQUEST_CODE = 1002
 }
 /*object Constants {
 	// Master password is now set dynamically

@@ -14,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.myklyuchik2.ui.navigation.AppNavHost
 import com.example.myklyuchik2.ui.theme.MyKlyuchikTheme
+import com.example.myklyuchik2.ui.csvexport.CsvPendingExport
 import com.example.myklyuchik2.ui.csvimport.CsvPendingImport
 import com.example.myklyuchik2.utils.Constants
 import java.io.File
@@ -33,6 +34,10 @@ class MainActivity : FragmentActivity() {
 			val uri = if (resultCode == RESULT_OK) data?.data else null
 			CsvPendingImport.callback?.invoke(uri)
 			return // в реестре для этого кода ничего не зарегистрировано
+		} else if (requestCode == Constants.CSV_EXPORT_REQUEST_CODE) {  // Add this block
+			val uri = if (resultCode == RESULT_OK) data?.data else null
+			CsvPendingExport.callback?.invoke(uri)
+			return
 		}
 		super.onActivityResult(requestCode, resultCode, data)
 	}

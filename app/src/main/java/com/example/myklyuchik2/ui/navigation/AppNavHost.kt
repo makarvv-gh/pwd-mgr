@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import android.content.Intent
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +24,8 @@ import com.example.myklyuchik2.ui.main.MainScreen
 import com.example.myklyuchik2.ui.splash.SplashScreen
 import com.example.myklyuchik2.ui.settings.SettingsScreen
 import com.example.myklyuchik2.ui.main.MainViewModel
+import com.example.myklyuchik2.ui.csvexport.CsvExportHost
+import com.example.myklyuchik2.ui.csvexport.CsvPendingExport
 import com.example.myklyuchik2.ui.csvimport.CsvImportHost
 import com.example.myklyuchik2.ui.csvimport.CsvPendingImport
 import com.example.myklyuchik2.ui.settings.ChangePasswordScreen
@@ -90,6 +93,17 @@ fun AppNavHost(
 		csvImportHost = csvImportHost,
 		appContext = appContext
 	)
+	val csvExportHost: CsvExportHost = viewModel(
+		viewModelStoreOwner = activity,
+		factory = CsvExportHost.factory(mainViewModel)
+	)
+
+	val csvExportLauncher = rememberCsvExportLauncher(
+		activity = activity,
+		csvExportHost = csvExportHost,
+		appContext = appContext
+	)
+
 	NavHost(
 		navController = navController,
 		startDestination = startDestination,
@@ -135,7 +149,8 @@ fun AppNavHost(
 			SettingsScreen(
 				navController = navController,
 				onNavigateBack = { navController.popBackStack() },
-				onExportCsv = { /* Handle export CSV action */ },
+				csvExportHost = csvExportHost,
+				csvExportLauncher = csvExportLauncher,
 				csvImportHost = csvImportHost,
 				csvPickerLauncher = csvPickerLauncher,
 				onChangePassword = { navController.navigate("change-password") },
@@ -242,6 +257,37 @@ internal fun rememberCsvPickerLauncher(
 
 			override val contract: ActivityResultContract<Array<String>, Uri?>
 				get() = ActivityResultContracts.OpenDocument()
+		}
+	}
+}
+@Composable
+private fun rememberCsvExportLauncher(
+	activity: androidx.fragment.app.FragmentActivity,
+	csvExportHost: CsvExportHost,
+	appContext: android.content.Context
+): (String) -> Unit {
+	val fixedRequestCode = Constants.CSV_EXPORT_REQUEST_CODE
+
+	return remember {
+		{ fileName: String ->
+			val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+				addCategory(Intent.CATEGORY_OPENABLE)
+				type = "text/csv"
+				putExtra(Intent.EXTRA_TITLE, fileName)
+
+				// Forzamos el uso de almacenamiento puro (no SAF) para evitar problemas de persistencia
+				putExtra("android.content.extra.SHOW_ADVANCED", true)
+				putExtra("android.content.extra.FORCE_FULL_SCREEN", true)
+			}
+
+			activity.startActivityForResult(intent, fixedRequestCode)
+
+			// Guardamos la callback para usarla en MainActivity
+			CsvPendingExport.callback = { uri ->
+				if (uri != null) {
+					csvExportHost.exportCsv(uri, appContext)
+				}
+			}
 		}
 	}
 }

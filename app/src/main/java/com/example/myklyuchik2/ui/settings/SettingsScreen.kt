@@ -31,35 +31,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.myklyuchik2.ui.csvimport.CsvImportHost
+import com.example.myklyuchik2.ui.csvexport.CsvExportHost
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
 	navController: NavController,
 	onNavigateBack: () -> Unit = { navController.popBackStack() },
-	//onNavigateBack = { navController.popBackStack()},
-		// Alternatively, you could use:
-		// navController.navigateUp()
-	onExportCsv: () -> Unit,
+	csvExportHost: CsvExportHost,  // Add this parameter
+	csvExportLauncher: (String) -> Unit,  // Add this parameter
 	csvImportHost: CsvImportHost,
 	csvPickerLauncher: ActivityResultLauncher<Array<String>>,
 	onChangePassword: () -> Unit = { navController.navigate("change-password") },
 	onCloudClick: () -> Unit // пока заглушка
 ) {
-	//val context = LocalContext.current
-
-	// Headless CSV import: the system document picker is launched straight from this
-	// screen — no intermediate Activity, no extra empty screen drawn on top of Settings.
-	// When a file comes back, CsvImportHost parses and persists it in the background.
-	/*val csvPickerLauncher = rememberLauncherForActivityResult(
-		contract = ActivityResultContracts.OpenDocument()
-	) { uri ->
-		if (uri != null) {
-			CsvImportHost.persistReadPermission(context, uri)
-			csvImportHost.importCsv(uri, context)
-		}
-	}*/
-
 	Scaffold(
 		topBar = {
 			TopAppBar(
@@ -97,9 +85,12 @@ fun SettingsScreen(
 				SettingsListItem(
 					title = "Экспорт в CSV",
 					icon = Icons.Default.Download,
-					onClick = onExportCsv,
-					enabled = false, // заглушка
-					trailing = { Badge { Text("Coming Soon") } }
+					onClick = {
+						// Generate filename with current date and time
+						val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+						val fileName = "export_$timestamp.csv"
+						csvExportLauncher(fileName)
+					}
 				)
 			}
 

@@ -5,7 +5,6 @@ import android.content.res.AssetManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.ViewModelProvider
-import com.example.myklyuchik2.data.importexport.CsvImporter
 import com.example.myklyuchik2.data.model.PasswordEntry
 import com.example.myklyuchik2.data.storage.JsonStorage
 import com.example.myklyuchik2.data.storage.SecurePasswordStorage
@@ -102,24 +101,6 @@ class MainViewModel private constructor(
 			} catch (e: Exception) {
 				_uiState.update { it.copy(isLoading = false, error = e.message) }
 				_events.send(UiEvent.ShowError("Ошибка загрузки: ${e.message}"))
-			}
-		}
-	}
-
-	fun importFromCsv(fileName: String) {
-		viewModelScope.launch {
-			_uiState.update { it.copy(isLoading = true) }
-			try {
-				val entries = CsvImporter.importFromAssets(assetManager, fileName)
-				val storage = SecurePasswordStorage.getInstance(context)
-				val decryptedPassword = storage.decryptPassword() ?: return@launch
-				SecureStorage.saveEncrypted(entries, decryptedPassword, dataPath)
-				// Reload from disk so state is refreshed after the save.
-				loadEntries()
-				_events.send(UiEvent.ShowSuccess("Импортировано ${entries.size} записей"))
-			} catch (e: Exception) {
-				_uiState.update { it.copy(isLoading = false, error = e.message) }
-				_events.send(UiEvent.ShowError("Ошибка импорта: ${e.message}"))
 			}
 		}
 	}
